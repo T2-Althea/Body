@@ -4,6 +4,7 @@
 
 import { BLEEDING, BODY_PART, BODY_STATES, INTENSITY_LABELS, KINDS, MIND_PART, PAIN_LEVELS, SEVERITIES, STATUSES, newId, npcKey } from './model.js';
 import { formatDuration } from './timeskip.js';
+import { meterStateText, resolveLevel } from './meters.js';
 
 export const DETECT_TAG = '[BODY_HUD_TASK:detect]';
 export const FILL_TAG = '[BODY_HUD_TASK:fill]';
@@ -21,6 +22,9 @@ const TRIGGER = new RegExp([
     'splint', 'treat', 'medic', 'potion', 'recover', 'scar(?!f|ce|ci)', 'sever(?!al)', 'amputat', 'missing', 'panic',
     'terrif', 'griev', 'sob(?!er)', 'trembl', 'shak', 'hungry', 'thirst', 'starv', 'overheat', 'heatstroke',
     'sunburn', 'concuss', 'unconscious', 'gash', 'graze', 'pierc', 'impal', 'choke', 'strangl', 'drown',
+    // Meters: eating, drinking, sleeping, exertion, magic.
+    'eat', 'ate\\b', 'meal', 'food', 'drink', 'drank', 'sip', 'sleep', 'slept', 'asleep', 'nap\\b', 'rested', 'resting',
+    'ran\\b', 'running', 'sprint', 'fight', 'fought', 'spell', 'cast(?!le)', 'mana\\b', 'yawn',
     // Time skips.
     '(hours|days|weeks|months|years|a day|a week|a month|a year) (later|passed|pass|went by|go by)',
     'the next (morning|day|evening|week)', 'time passe', 'after (a|an|two|three|several|many|a few) (hours|days|weeks|months)',
@@ -76,16 +80,18 @@ function describeCondition(c, partName) {
 }
 
 /**
- * @param {{ members, bodies, index, message: { name, text }, previous?: { name, text } }} input
+ * @param {{ members, bodies, index, message: { name, text }, previous?: { name, text }, meters?: { defs, enabled: (key) => string[] } }} input
  * @returns {{ system: string, user: string, ids: ReturnType<typeof shortIds> }}
  */
-export function buildDetectPrompt({ members, bodies, index, message, previous }) {
+export function buildDetectPrompt({ members, bodies, index, message, previous, meters = null }) {
     const partName = id => index.parts.get(id)?.name || id;
     const ids = shortIds(members, bodies);
     const state = members.map(m => {
         const body = bodies.get(m.key);
         const conds = [...(body?.conditions.values() || [])].map(c => `  [${ids.toShort.get(`${m.key}|${c.id}`)}] ${describeCondition(c, partName)}`);
         if (body?.temp != null) conds.push(`  temperature ${body.temp} °C`);
+        const meterText = meters ? meterStateText(meters.defs, meters.enabled(m.key), body) : '';
+        if (meterText) conds.push(`  meters: ${meterText}`);
         return `${m.name}${m.isUser ? ' (the user)' : ''}:\n${conds.length ? conds.join('\n') : '  (nothing)'}`;
     }).join('\n');
 
@@ -100,19 +106,21 @@ Rules:
 - If the text doesn't say left or right, give the part WITHOUT the left_/right_ prefix; never guess a side.
 - Effects are short capability limits ("can't run; limps"), not descriptions.
 - If the message explicitly skips time ("three days later", "after a week of rest"), add one {"action": "time_passes", "days": <number>}; hours are fractions of a day. Don't report healing yourself for a time skip.
-- Most messages change nothing. Then return {"changes": []}.
+- Forcing a physical feat past one's limits costs an injury (torn muscle, cracked bone…): add it.
+${meters?.defs.length ? `- Meters (listed per character) change only when the message shows it: eating or drinking, sleeping or resting, running or fighting (stamina), casting (mana). Use the level names given below; move one or two levels at a time unless the text says more.
+` : ''}- Most messages change nothing. Then return {"changes": []}.
 
 Reply with JSON only:
 {"changes": [
  {"action": "add", "character": "<name>", "kind": "injury|missing|state|effect|natural|mind_lasting|mind_current|mark", "part": "<part id>", "type": "<what, e.g. Arrow wound>", "severity": "minor|moderate|severe|critical", "bleeding": "none|light|moderate|heavy", "status": "fresh|treated|healing|scarred|permanent", "pain": "none|mild|moderate|severe|agonizing", "details": "", "effect": "", "cause": "", "hidden": false},
  {"action": "update", "character": "<name>", "id": "<c1…>", "changes": {"status": "treated", "bleeding": "none"}},
  {"action": "remove", "character": "<name>", "id": "<c1…>"},
- {"action": "temperature", "character": "<name>", "celsius": 38.5},
+ {"action": "temperature", "character": "<name>", "celsius": 38.5},${meters?.defs.length ? '\n {"action": "meter", "character": "<name>", "meter": "<meter id>", "level": "<level name>"},' : ''}
  {"action": "time_passes", "days": 3}
 ]}
 kind "mark" = tattoos, body paint, brands (status "permanent" or "temporary"); kind "injury" = anything else on a body part; "state" = whole-body states (${BODY_STATES.join(', ').toLowerCase()}…), part optional; "effect" = poison, drugs, medicine and its side effects, magic enhancements or curses (severity = intensity), no part; "natural" = period, pregnancy, heat and similar natural body states, no part; mind kinds need no part. "pain" is optional.
 
-Part ids. * = needs a left_ or right_ prefix; a * on a region (before the colon) applies to every part on that line, e.g. leg* → left_thigh, right_knee:
+${meters?.defs.length ? `Meter levels, comfortable first:\n${meters.defs.map(d => `${d.id}: ${d.levels.map(l => l.name.toLowerCase()).join(' → ')}`).join('\n')}\n\n` : ''}Part ids. * = needs a left_ or right_ prefix; a * on a region (before the colon) applies to every part on that line, e.g. leg* → left_thigh, right_knee:
 ${partGuide(index)}`;
 
     const user = `CHARACTERS AND CURRENT STATE:
@@ -142,7 +150,7 @@ export function resolvePart(raw, index) {
  * Turns the model's reply into proposals. Each proposal is { pid, who, op, summary }
  * plus `needsSide: base` when the side must be chosen before it can be applied.
  */
-export function parseDetection(json, { members, index, ids, allowNpcs = true }) {
+export function parseDetection(json, { members, index, ids, allowNpcs = true, meters = null }) {
     const out = [];
     const skipped = [];
     const byName = name => members.find(m => m.name.toLowerCase() === str(name).toLowerCase());
@@ -228,6 +236,12 @@ export function parseDetection(json, { members, index, ids, allowNpcs = true }) 
             if (!Object.keys(changes).length) { skipped.push('update without changes'); continue; }
             const what = Object.entries(changes).map(([k, v]) => `${k} → ${v}`).join(', ');
             out.push({ pid: newId(), who: m.key, op: { t: 'edit', who: m.key, id: ref.id, changes }, summary: `${m.name}: ${what}` });
+        } else if (action === 'meter') {
+            const def = meters?.defs.find(d => d.id === str(ch.meter).toLowerCase() || d.name.toLowerCase() === str(ch.meter).toLowerCase());
+            if (!def || !meters.enabled(m.key).includes(def.id)) { skipped.push(`meter "${str(ch.meter)}" not used by ${m.name}`); continue; }
+            const level = resolveLevel(def, ch.level);
+            if (level === null) { skipped.push(`unknown level "${str(ch.level)}" for ${def.id}`); continue; }
+            out.push({ pid: newId(), who: m.key, op: { t: 'meter', who: m.key, id: def.id, level }, summary: `${m.name}: ${def.name.toLowerCase()} → ${def.levels[level].name.toLowerCase()}` });
         } else if (action === 'temperature') {
             const v = Number(ch.celsius);
             if (!isFinite(v) || v < 20 || v > 45) { skipped.push('implausible temperature'); continue; }

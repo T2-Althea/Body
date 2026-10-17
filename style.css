@@ -694,3 +694,97 @@
 .bh-chip-x:hover {
     opacity: 1;
 }
+
+/* ---------- meters ---------- */
+
+.bh-meters {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 6px;
+}
+
+.bh-meter {
+    display: grid;
+    grid-template-columns: 7.5em 1fr 9em;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.85em;
+    padding: 1px 2px;
+    border-radius: 4px;
+}
+
+.bh-meter:hover {
+    background: var(--white20a, rgba(255, 255, 255, 0.08));
+}
+
+.bh-meter-name {
+    opacity: 0.85;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bh-meter-level {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bh-meter-bar {
+    display: flex;
+    gap: 2px;
+    height: 8px;
+}
+
+.bh-seg {
+    flex: 1;
+    border-radius: 2px;
+    background: var(--black30a, rgba(0, 0, 0, 0.3));
+    border: 1px solid var(--SmartThemeBorderColor);
+}
+
+.bh-tone-ok .bh-seg-on { background: #5d9c59; }
+.bh-tone-minor .bh-seg-on { background: var(--bh-minor); }
+.bh-tone-moderate .bh-seg-on { background: var(--bh-moderate); }
+.bh-tone-severe .bh-seg-on { background: var(--bh-severe); }
+.bh-tone-severe .bh-meter-level { color: var(--bh-severe); }
+
+.bh-levels {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.bh-levels .bh-level {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin: 0;
+    padding: 4px 8px;
+    text-align: left;
+}
+
+.bh-levels .bh-level small {
+    opacity: 0.8;
+    white-space: normal;
+}
+
+#body_hud_panel .bh-levels .bh-level.bh-active {
+    outline: 2px solid var(--SmartThemeQuoteColor);
+}
+
+.bh-meter-editor .bh-json {
+    width: 100%;
+    font-family: monospace;
+    font-size: 0.85em;
+}
+
+.bh-meter-editor .bh-reset {
+    display: inline-flex;
+    width: auto;
+    white-space: nowrap;
+}

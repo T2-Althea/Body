@@ -8,6 +8,7 @@
 // - a hard token budget, cutting the least important lines first.
 
 import { BODY_PART, INTENSITY_LABELS, severityRank } from './model.js';
+import { meterNoteLines } from './meters.js';
 
 export const NOTE_HEADER = '[Body status — in effect right now]';
 
@@ -106,7 +107,7 @@ function wholeBodyLine(states, temp, opts, partName) {
  * @param {{ key, name, isUser }[]} members scene members, in display order
  * @param {Map} bodies from replay()
  * @param {{ parts: Map }} index expanded template
- * @param {{ budget: number, tempUnit: 'C'|'F', tempInNote: 'abnormal'|'always', realism?: string }} opts
+ * @param {{ budget: number, tempUnit: 'C'|'F', tempInNote: 'abnormal'|'always', realism?: string, meters?: { defs, enabled: (key: string) => string[] } }} opts
  * @param {(text: string) => number} countTokens
  * @returns {{ text: string, tokens: number, omitted: number }}
  */
@@ -132,6 +133,9 @@ export function buildNote(members, bodies, index, opts, countTokens) {
         }
         const wb = wholeBodyLine(states, body.temp, opts, partName);
         if (wb) candidates.push({ mi, ...wb });
+        if (opts.meters) {
+            for (const line of meterNoteLines(opts.meters.defs, opts.meters.enabled(m.key), body)) candidates.push({ mi, ...line });
+        }
     });
     if (!candidates.length) return { text: '', tokens: 0, omitted: 0 };
 

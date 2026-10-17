@@ -8,6 +8,7 @@
 //   bleeding leaves the character weak from blood loss.
 
 import { BODY_PART, SEVERITIES, newId } from './model.js';
+import { planMeterRecovery } from './meters.js';
 
 export const REALISM = {
     cinematic: 'Cinematic: quick healing, nothing worsens on its own',
@@ -82,9 +83,10 @@ function healedResult(c) {
  * @param {'cinematic'|'grounded'|'simulation'} realism
  * @param {(key: string) => string} nameOf for summaries
  * @param {(partId: string) => string} partName for summaries
+ * @param {{ meters?: { defs, enabled: (key: string) => string[] } }} [options]
  * @returns {{ id: string, who: string, op: object, summary: string, group: string }[]}
  */
-export function planTimeSkip(bodies, who, days, realism, nameOf, partName) {
+export function planTimeSkip(bodies, who, days, realism, nameOf, partName, { meters = null } = {}) {
     const out = [];
     const push = (w, op, summary, group) => out.push({ id: newId(), who: w, op, summary: `${nameOf(w)}: ${summary}`, group });
     const speed = SPEED[realism] || 1;
@@ -180,6 +182,9 @@ export function planTimeSkip(bodies, who, days, realism, nameOf, partName) {
             if (!already) {
                 push(key, { t: 'add', who: key, cond: { id: newId(), kind: 'state', part: BODY_PART, type: 'Weak from blood loss', severity: sev, effect: 'Dizzy, slow, tires quickly', details: '', cause: 'Untreated bleeding', hidden: false } }, 'weak from blood loss', 'worsen');
             }
+        }
+        if (meters) {
+            for (const r of planMeterRecovery(meters.defs, meters.enabled(key), body, key, days, realism)) push(key, r.op, r.summary, r.group);
         }
         if (realism === 'simulation' && infected) {
             push(key, { t: 'temp', who: key, value: 38.9 }, 'fever (38.9 °C) from infection', 'worsen');

@@ -88,6 +88,18 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
   "Mind: current state"). Auto source options: read SillyTavern's Expressions
   extension (28 labels; `/expression-last` returns a character's last one) or
   report mood from the M4 detection call. Note only includes strong/relevant moods.
+- **Meters: DONE.** `templates/meters.json` (built-in) or `settings.customMeters`
+  (edited as JSON in a popup, `editMeters` in index.js; `normalizeMeters` validates).
+  `src/meters.js` (pure, unit-tested): level 0 = comfortable; op `{t:'meter', who,
+  id, level}` → `body.meters`. Per member: `profiles[key].meters` / `body.npc.meters`,
+  else meters with `default: true` (`memberMeters`; `meterContext(defs, profiles)`
+  → `{defs, enabled(key)}` passed to note, detection, time skips). Bars under the
+  chips (full = comfortable), click → level picker. Note: one line per meter off
+  level 0, words only. Time skips recover one level per `recoverHours` (cinematic:
+  all). Detection gets meter state + level names, action `meter`; prefilter has
+  eating/sleeping/casting words. "Strain warning" is a status-effect suggestion;
+  detection is told forcing a feat past one's limits costs an injury.
+  e2e: `dev/e2e-meters.cjs`; unit: `tests/meters.test.mjs`. Original request:
 - **Meters (hunger, thirst, mana, stamina, sleep…):** one generic feature.
   A meter = named stepped levels, each with a short effect line; shown as a small
   bar per character in the HUD, sent to the AI as words only, and only when not

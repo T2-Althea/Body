@@ -1,0 +1,61 @@
+{
+    "version": 1,
+    "meters": [
+        {
+            "id": "hunger", "name": "Hunger", "default": true, "recoverHours": 4,
+            "levels": [
+                { "name": "Fed", "effect": "" },
+                { "name": "Peckish", "effect": "Thinks about food now and then" },
+                { "name": "Hungry", "effect": "Stomach growls; harder to focus" },
+                { "name": "Starving", "effect": "Weak, shaky and irritable; can think of little but food" }
+            ]
+        },
+        {
+            "id": "thirst", "name": "Thirst", "default": true, "recoverHours": 1,
+            "levels": [
+                { "name": "Quenched", "effect": "" },
+                { "name": "Thirsty", "effect": "Dry mouth; wants a drink" },
+                { "name": "Parched", "effect": "Headache and slowed thinking" },
+                { "name": "Dehydrated", "effect": "Dizzy, weak and confused" }
+            ]
+        },
+        {
+            "id": "sleep", "name": "Sleep", "default": true, "recoverHours": 3,
+            "levels": [
+                { "name": "Rested", "effect": "" },
+                { "name": "Tired", "effect": "Yawning; slower reactions" },
+                { "name": "Sleep-deprived", "effect": "Poor judgement; dozes off when still" },
+                { "name": "Barely functioning", "effect": "Stumbling, microsleeps, can barely think" }
+            ]
+        },
+        {
+            "id": "stamina", "name": "Stamina", "default": true, "recoverHours": 0.5,
+            "levels": [
+                { "name": "Fresh", "effect": "" },
+                { "name": "Winded", "effect": "Breathing hard" },
+                { "name": "Tired", "effect": "Arms and legs heavy; slower" },
+                { "name": "Exhausted", "effect": "Stumbling; every movement costs effort" },
+                { "name": "Spent", "effect": "Can barely stand; the body refuses to push further" }
+            ]
+        },
+        {
+            "id": "mana", "name": "Mana", "default": false, "recoverHours": 0.75,
+            "levels": [
+                { "name": "Full", "effect": "" },
+                { "name": "Drawn on", "effect": "Feels the draw, nothing more" },
+                { "name": "Low", "effect": "Spells feel heavy; mild fatigue" },
+                { "name": "The ring", "effect": "Muffled hearing, tunnel vision and a ringing in the ears: the body's warning that the mana is nearly gone" },
+                { "name": "Depleted", "effect": "Mana sickness: paralysis, hallucinations, a heavy nosebleed, then a depletion coma nothing can wake them from until some mana returns" }
+            ]
+        },
+        {
+            "id": "mana_saturation", "name": "Mana saturation", "default": false, "recoverHours": 2,
+            "levels": [
+                { "name": "None", "effect": "" },
+                { "name": "Tingling", "effect": "Tingling in the hands and feet" },
+                { "name": "Saturated", "effect": "Headache; disturbances at the edge of vision" },
+                { "name": "Overloaded", "effect": "Disoriented; at risk of crystallization" }
+            ]
+        }
+    ]
+}

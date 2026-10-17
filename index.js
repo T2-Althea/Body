@@ -4,10 +4,11 @@
 
 import { openFeatureEditor } from './src/editor.js';
 import { DEFAULT_NATURAL_STATES, customFeatureFile, expandTemplate, mergeFeatureFiles, withFeatures } from './src/model.js';
+import { normalizeMeters } from './src/meters.js';
 import { buildNote, estimateTokens } from './src/note.js';
 import { applyLayout, initPanel, render } from './src/panel.js';
 import { initRunner, onNewMessage } from './src/runner.js';
-import { buildBodies, getSceneMembers, hasOpenChat } from './src/store.js';
+import { buildBodies, getSceneMembers, hasOpenChat, meterContext } from './src/store.js';
 
 const MODULE = 'body_hud';
 
@@ -27,6 +28,7 @@ const defaultSettings = Object.freeze({
     tempInNote: 'abnormal',
     notePreviewOpen: false,
     customFeatures: { features: [], presets: [] }, // made in the races & features editor
+    customMeters: null,     // the user's meter file ({ meters: [...] }); null = the built-in templates/meters.json
     realism: 'grounded',
     naturalStates: DEFAULT_NATURAL_STATES, // offered under Body → Natural; "Name (female|male|any): stage, stage"
     profiles: {},           // body sex per character/persona: { 'c:<avatar>' | 'u:<persona>': { sex } }
@@ -44,6 +46,16 @@ const defaultSettings = Object.freeze({
 let templateIndex = null;
 let baseTemplate = null;
 let builtinFeatures = null;
+let builtinMeters = { meters: [] };
+
+/** Meter definitions in use: the user's edited file, or the built-in one. */
+function getMeterDefs() {
+    const custom = getSettings().customMeters;
+    if (custom) {
+        try { return normalizeMeters(custom).meters; } catch (e) { console.warn('[Body HUD] custom meters invalid, using built-in', e); }
+    }
+    return builtinMeters.meters;
+}
 
 function ctx() {
     return SillyTavern.getContext();
@@ -60,10 +72,13 @@ function saveSettings() {
 }
 
 async function loadTemplate() {
-    [baseTemplate, builtinFeatures] = await Promise.all([
+    let meters;
+    [baseTemplate, builtinFeatures, meters] = await Promise.all([
         fetch(new URL('./templates/human.json', import.meta.url)).then(r => r.json()),
         fetch(new URL('./templates/addons.json', import.meta.url)).then(r => r.json()).catch(() => null),
+        fetch(new URL('./templates/meters.json', import.meta.url)).then(r => r.json()).catch(() => null),
     ]);
+    try { builtinMeters = normalizeMeters(meters); } catch (e) { console.error('[Body HUD] meters.json invalid', e); }
     rebuildTemplate();
 }
 
@@ -84,6 +99,39 @@ function editFeatures() {
     });
 }
 
+// The meter file as JSON in a popup: edit, reset to the built-in one, or paste one shared by someone.
+async function editMeters() {
+    const { callGenericPopup, POPUP_TYPE, POPUP_RESULT } = ctx();
+    const root = document.createElement('div');
+    root.className = 'bh-meter-editor';
+    root.innerHTML = `<h3>Meters</h3>
+        <p>Each meter is a list of levels, the comfortable one first. <code>effect</code> is the short line the AI gets; <code>default</code> = on for everyone until changed per character; <code>recoverHours</code> = hours to recover one level during a time skip.</p>
+        <textarea class="text_pole bh-json" rows="22" spellcheck="false"></textarea>
+        <div class="menu_button bh-reset">Reset to the built-in meters</div>`;
+    const area = root.querySelector('textarea');
+    area.value = JSON.stringify({ meters: getMeterDefs() }, null, 2);
+    root.querySelector('.bh-reset').addEventListener('click', () => { area.value = JSON.stringify(builtinMeters, null, 2); });
+    await callGenericPopup(root, POPUP_TYPE.CONFIRM, '', {
+        okButton: 'Save', cancelButton: 'Cancel', wide: true, large: true, allowVerticalScrolling: true,
+        onClosing: popup => {
+            if (popup.result !== POPUP_RESULT.AFFIRMATIVE) return true;
+            let parsed;
+            try {
+                parsed = normalizeMeters(JSON.parse(area.value));
+            } catch (e) {
+                toastr.warning(e instanceof SyntaxError ? 'That isn\'t valid JSON: ' + e.message : e.message, 'Body HUD');
+                return false;
+            }
+            const same = JSON.stringify(parsed) === JSON.stringify(builtinMeters);
+            getSettings().customMeters = same ? null : parsed;
+            saveSettings();
+            refresh();
+            toastr.success('Meters saved.', 'Body HUD');
+            return true;
+        },
+    });
+}
+
 /** The note for the current chat, or an empty one. */
 function computeNote({ skipDetectedAt = -1 } = {}) {
     const s = getSettings();
@@ -95,6 +143,7 @@ function computeNote({ skipDetectedAt = -1 } = {}) {
         tempInNote: s.tempInNote,
         realism: s.realism,
         marksInNote: s.marksInNote,
+        meters: meterContext(getMeterDefs(), s.profiles),
     }, estimateTokens);
 }
 
@@ -148,6 +197,10 @@ function renderSettings() {
                         <option value="C" ${sel('C', s.tempUnit)}>°C</option>
                         <option value="F" ${sel('F', s.tempUnit)}>°F</option>
                     </select>
+                </div>
+                <div class="bh-setting-row" title="Hunger, thirst, sleep, stamina, mana… Add your own meters or change their levels and effect lines.">
+                    <span>Meters</span>
+                    <div id="body_hud_edit_meters" class="menu_button"><i class="fa-solid fa-pen"></i> Edit</div>
                 </div>
                 <div class="bh-setting-row">
                     <span>Races and body features</span>
@@ -275,6 +328,7 @@ function renderSettings() {
         return el.value;
     });
     $('#body_hud_edit_features').on('click', () => editFeatures());
+    $('#body_hud_edit_meters').on('click', () => editMeters());
     bind('#body_hud_inject', 'inject', el => el.checked);
     bind('#body_hud_position', 'position', el => Number(el.value));
     bind('#body_hud_depth', 'depth', num(0, 50));
@@ -339,10 +393,13 @@ jQuery(async () => {
         getNote: computeNote,
         onStateChange: updateInjection,
         editFeatures,
+        getMeterDefs,
+        editMeters,
     });
     initRunner({
         getSettings,
         getIndex: () => templateIndex,
+        getMeterDefs,
         onChange: queueRefresh,
         openPanel: () => {
             getSettings().panelOpen = true;

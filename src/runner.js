@@ -4,11 +4,11 @@
 import { buildDetectPrompt, buildFillPrompt, mightMatter, parseDetection } from './detect.js';
 import { callModel, describeFailure, extractJson } from './llm.js';
 import { fingerprint } from './model.js';
-import { addPending, buildBodies, getSceneMembers, pruneStale, writeDetectedOps } from './store.js';
+import { addPending, buildBodies, getSceneMembers, meterContext, pruneStale, writeDetectedOps } from './store.js';
 
 const ctx = () => SillyTavern.getContext();
 
-let opts;          // { getSettings, getIndex, onChange, openPanel }
+let opts;          // { getSettings, getIndex, getMeterDefs, onChange, openPanel }
 let queue = Promise.resolve();
 let busy = 0;
 
@@ -76,6 +76,7 @@ async function detect(msg, { manual }) {
     // A fresh reply has no swipe_id until SillyTavern sets it to 0 a moment later.
     const swipe = msg.swipe_id ?? 0;
     const members = getSceneMembers();
+    const meters = meterContext(opts.getMeterDefs?.() || [], opts.getSettings().profiles);
     const prev = opts.getSettings().detectContext ? c.chat.slice(0, i).reverse().find(m => !m.is_system) : null;
     const { system, user, ids } = buildDetectPrompt({
         members,
@@ -83,6 +84,7 @@ async function detect(msg, { manual }) {
         index,
         message: { name: msg.name, text: msg.mes },
         previous: prev ? { name: prev.name, text: prev.mes } : null,
+        meters,
     });
 
     setBusy(1);
@@ -106,7 +108,7 @@ async function detect(msg, { manual }) {
     // The message may have been deleted, edited or swiped while we waited.
     if (!c.chat.includes(msg) || fingerprint(msg.mes) !== fp || (msg.swipe_id ?? 0) !== swipe) return;
 
-    const { proposals, skipped } = parseDetection(json, { members, index, ids, allowNpcs: opts.getSettings().detectNpcs !== false });
+    const { proposals, skipped } = parseDetection(json, { members, index, ids, allowNpcs: opts.getSettings().detectNpcs !== false, meters });
     if (skipped.length) console.debug('[Body HUD] detection skipped:', skipped);
     if (!proposals.length) {
         if (manual) toastr.info('Body HUD: no body changes found in that message.');

@@ -31,7 +31,7 @@ export function getSceneMembers({ bodies = null } = {}) {
     }
     // NPCs currently in the scene.
     for (const [key, body] of bodies || buildBodies()) {
-        if (body.npc?.present) members.push({ key, name: body.npc.name, isUser: false, npc: true, sex: body.npc.sex, features: body.npc.features });
+        if (body.npc?.present) members.push({ key, name: body.npc.name, isUser: false, npc: true, sex: body.npc.sex, features: body.npc.features, meters: body.npc.meters });
     }
     return members;
 }
@@ -277,4 +277,22 @@ export function memberSex(member, profiles = {}) {
 export function memberFeatures(member, profiles = {}) {
     if (member.npc) return member.features || [];
     return profiles[profileKey(member)]?.features || [];
+}
+
+/** Meter ids a scene member uses: their own choice, or the meters marked default. */
+export function memberMeters(member, profiles = {}, defs = []) {
+    const saved = member.npc ? member.meters : profiles[profileKey(member)]?.meters;
+    return Array.isArray(saved) ? saved.filter(id => defs.some(d => d.id === id)) : defs.filter(d => d.default).map(d => d.id);
+}
+
+/** { defs, enabled(key) } for the note, detection and time skips. */
+export function meterContext(defs, profiles = {}) {
+    const members = getSceneMembers();
+    return {
+        defs,
+        enabled: key => {
+            const m = members.find(x => x.key === key);
+            return m ? memberMeters(m, profiles, defs) : [];
+        },
+    };
 }

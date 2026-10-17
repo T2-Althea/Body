@@ -155,6 +155,10 @@ export function applyOp(bodies, op, messageIndex) {
         case 'temp':
             body.temp = typeof op.value === 'number' && isFinite(op.value) ? op.value : null;
             break;
+        // Meters (hunger, mana…): a level index, 0 = comfortable.
+        case 'meter':
+            if (op.id && Number.isInteger(op.level) && op.level >= 0) body.meters = { ...(body.meters || {}), [op.id]: op.level };
+            break;
         // NPCs: someone who isn't a SillyTavern character. They join and leave the
         // scene through ops too, so they follow swipes, deletions and branches.
         case 'npc_add':
@@ -238,7 +242,7 @@ export function missingParts(body, index) {
 
 /** True when the body has anything worth showing (drives the tab's warning dot). */
 export function isAffected(body) {
-    return !!body && (body.conditions.size > 0 || body.temp !== null);
+    return !!body && (body.conditions.size > 0 || body.temp !== null || Object.values(body.meters || {}).some(l => l > 0));
 }
 
 export function severityRank(sev) {

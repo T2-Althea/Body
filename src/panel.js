@@ -9,10 +9,11 @@ import { withSide } from './detect.js';
 import { describeFailure } from './llm.js';
 import { tempLabel } from './note.js';
 import { renderMannequin } from './mannequin.js';
+import { activeMeters, meterLevel, meterRatio } from './meters.js';
 import { isBusy, scanLatest, suggestFields } from './runner.js';
 import { UNITS, daysLeft, daysToNextStage, formatDuration, planTimeSkip } from './timeskip.js';
 import {
-    buildBodies, collectPending, getAwayNpcs, getSceneMembers, hasOpenChat, memberFeatures, memberSex, profileKey, recentDetected, resolvePending,
+    buildBodies, collectPending, getAwayNpcs, getSceneMembers, hasOpenChat, memberFeatures, memberMeters, memberSex, meterContext, profileKey, recentDetected, resolvePending,
     undoOp, undoSkip, writeManualOps,
 } from './store.js';
 
@@ -31,7 +32,7 @@ const MIND_TYPES = [
 const EFFECT_TYPES = [
     'Poisoned', 'Drugged', 'Sedated', 'Painkillers', 'Stimulant', 'Side effects', 'Allergic reaction',
     'Hangover', 'Healing potion', 'Blessed', 'Cursed', 'Hexed', 'Charmed', 'Weakened',
-    'Enhanced strength', 'Enhanced speed', 'Night vision',
+    'Enhanced strength', 'Enhanced speed', 'Night vision', 'Strain warning',
 ];
 
 // "Ends" choices in the progress block.
@@ -43,7 +44,7 @@ const SIDE_DRAWERS = {
     left: ['#left-nav-panel', '#WorldInfo'],
 };
 
-let opts;            // { getSettings, saveSettings, getIndex, getNote, onStateChange }
+let opts;            // { getSettings, saveSettings, getIndex, getNote, onStateChange, editFeatures, getMeterDefs, editMeters }
 let selected = null; // member key currently shown
 let form = null;     // null | { mode: 'add'|'edit'|'temp'|'review', id?, part?, draft?, index?, pid?, who?, cond? }
 let zoom = null;     // region id being inspected, or null for the whole body
@@ -103,6 +104,11 @@ export function initPanel(options) {
         .on('change', '#bh_p_race', function () {
             const preset = opts.getIndex()?.presets.find(p => p.id === this.value);
             if (preset) saveFeatures([...preset.features]);
+        })
+        .on('change', '.bh-meter-pick input', function () {
+            const have = new Set(currentMeters());
+            if (this.checked) have.add(this.getAttribute('data-meter')); else have.delete(this.getAttribute('data-meter'));
+            saveMeters((opts.getMeterDefs?.() || []).map(d => d.id).filter(id => have.has(id)));
         })
         .on('change', '.bh-feature input', function () {
             const have = new Set(currentFeatures());
@@ -229,7 +235,9 @@ export function render() {
         const area = c.part && c.part !== BODY_PART ? ` · ${partName(index, c.part)}` : '';
         html += `<span class="bh-chip bh-sev-${esc(c.severity)}" data-act="edit" data-id="${esc(c.id)}" title="${esc(c.effect || 'Click to edit')}">${esc(c.type)}${esc(area)}${c.hidden ? ' 🙈' : ''}<span class="fa-solid fa-xmark bh-chip-x" data-act="remove" data-id="${esc(c.id)}" title="Remove"></span></span>`;
     }
-    html += '</div></div>';
+    html += '</div>';
+    html += renderMeters(body);
+    html += '</div>';
 
     if (effects.length) html += section('Status effects', effects.sort((a, b) => severityRank(b.severity) - severityRank(a.severity)).map(c => condRow(c, index)).join(''));
     if (mind.length) html += section('Mind', mind.map(c => condRow(c, index)).join(''));
@@ -257,7 +265,7 @@ export function render() {
 
     if (marks.length) html += section('Marks', marks.map(c => condRow(c, index)).join(''));
 
-    if (!conds.length && body.temp === null) {
+    if (!isAffected(body)) {
         html += '<div class="bh-empty">No conditions. Nothing is sent to the AI for this character.</div>';
     }
 
@@ -516,6 +524,7 @@ function renderSkipForm(members) {
 
 function renderForm(body, index) {
     if (form.mode === 'skip') return renderSkipForm(getSceneMembers());
+    if (form.mode === 'meter') return renderMeterForm(body);
     if (form.mode === 'npc') {
         return `<div class="bh-form">
             <div class="bh-section-title">New NPC</div>
@@ -772,6 +781,15 @@ async function onAction(e) {
         case 'side': { const p = findPending(); if (p) await afterStore(resolvePending(pIndex, pid, opsFor(p, withSide(p, $(this).attr('data-side')).op))); return; }
         case 'npc-new': form = { mode: 'npc', scroll: true }; render(); return;
         case 'edit-features': opts.editFeatures?.(); return;
+        case 'edit-meters': opts.editMeters?.(); return;
+        case 'meter': form = { mode: 'meter', id: $(this).attr('data-id'), scroll: true }; render(); return;
+        case 'meter-set': {
+            const level = Number($(this).attr('data-level'));
+            const meterId = $(this).attr('data-id');
+            form = null;
+            await afterStore(writeManualOps([{ t: 'meter', who: selected, id: meterId, level }]));
+            return;
+        }
         case 'npc-save': {
             const name = String($('#bh_n_name').val() || '').trim();
             if (!name) { toastr.warning('Give the NPC a name.'); return; }
@@ -986,7 +1004,9 @@ function planSkip() {
     const members = getSceneMembers();
     const who = form.scope === 'one' ? [selected] : members.map(m => m.key);
     const nameOf = key => members.find(m => m.key === key)?.name || key;
-    return planTimeSkip(buildBodies(), who, skipDays(), opts.getSettings().realism, nameOf, id => partName(index, id));
+    return planTimeSkip(buildBodies(), who, skipDays(), opts.getSettings().realism, nameOf, id => partName(index, id), {
+        meters: meterContext(opts.getMeterDefs?.() || [], opts.getSettings().profiles),
+    });
 }
 
 // ---------- body profile (sex / shape) ----------
@@ -1051,7 +1071,78 @@ function renderProfile(members) {
         <select id="bh_p_sex" class="text_pole">${choices}</select>
         ${guessed ? '<small class="bh-guess">guessed from the description</small>' : ''}
         ${m.npc ? '<span class="bh-link bh-leave" data-act="npc-leave" title="Takes them out of the scene and the AI\'s note; their body is kept">Leaves the scene</span>' : ''}
-    </div>${renderRace(m)}`;
+    </div>${renderRace(m)}${renderMeterPicker(m)}`;
+}
+
+// ---------- meters ----------
+
+/** Meter ids the selected character uses. */
+function currentMeters() {
+    const m = selectedMember();
+    return m ? memberMeters(m, opts.getSettings().profiles, opts.getMeterDefs?.() || []) : [];
+}
+
+async function saveMeters(meters) {
+    const m = selectedMember();
+    if (!m) return;
+    if (m.npc) {
+        await writeManualOps([{ t: 'npc_update', who: m.key, changes: { meters } }]);
+    } else {
+        const s = opts.getSettings();
+        s.profiles = s.profiles || {};
+        s.profiles[profileKey(m)] = { ...(s.profiles[profileKey(m)] || {}), meters };
+        opts.saveSettings();
+    }
+    render();
+    opts.onStateChange?.();
+}
+
+// Which meters this character has (mana only for casters…).
+function renderMeterPicker(m) {
+    const defs = opts.getMeterDefs?.() || [];
+    if (!defs.length) return '';
+    const have = memberMeters(m, opts.getSettings().profiles, defs);
+    const boxes = defs.map(d => `<label class="bh-feature bh-meter-pick"><input type="checkbox" data-meter="${esc(d.id)}" ${have.includes(d.id) ? 'checked' : ''}> ${esc(d.name)}</label>`).join('');
+    return `<div class="bh-profile bh-race">
+        <span>Meters</span>
+        <span class="fa-solid fa-pen bh-iconbtn" data-act="edit-meters" title="Edit meters and their levels"></span>
+        <span class="bh-features">${boxes}</span>
+    </div>`;
+}
+
+// A small bar per meter: full = comfortable, empty = worst level.
+function renderMeters(body) {
+    const meters = activeMeters(opts.getMeterDefs?.() || [], currentMeters());
+    if (!meters.length) return '';
+    const rows = meters.map(def => {
+        const level = meterLevel(body, def.id, def);
+        const ratio = meterRatio(def, level);
+        const steps = def.levels.length - 1;
+        const tone = level === 0 ? 'ok' : ratio <= 0.34 ? 'minor' : ratio <= 0.67 ? 'moderate' : 'severe';
+        const segs = Array.from({ length: steps }, (_, i) => `<span class="bh-seg ${i < steps - level ? 'bh-seg-on' : ''}"></span>`).join('');
+        const l = def.levels[level];
+        return `<div class="bh-meter bh-tone-${tone}" data-act="meter" data-id="${esc(def.id)}" title="${esc(`${def.name}: ${l.name}${l.effect ? ' — ' + l.effect : ''}. Click to change.`)}">
+            <span class="bh-meter-name">${esc(def.name)}</span>
+            <span class="bh-meter-bar">${segs}</span>
+            <span class="bh-meter-level">${esc(l.name)}</span>
+        </div>`;
+    }).join('');
+    return `<div class="bh-meters">${rows}</div>`;
+}
+
+// Quick picker: one button per level, with what it means.
+function renderMeterForm(body) {
+    const def = (opts.getMeterDefs?.() || []).find(d => d.id === form.id);
+    if (!def) { form = null; return ''; }
+    const current = meterLevel(body, def.id, def);
+    const levels = def.levels.map((l, i) => `<div class="bh-level menu_button ${i === current ? 'bh-active' : ''}" data-act="meter-set" data-id="${esc(def.id)}" data-level="${i}">
+        <b>${esc(l.name)}</b>${l.effect ? `<small>${esc(l.effect)}</small>` : '<small>Fine: nothing is sent to the AI</small>'}
+    </div>`).join('');
+    return `<div class="bh-form">
+        <div class="bh-section-title">${esc(def.name)}</div>
+        <div class="bh-levels">${levels}</div>
+        <div class="bh-actions"><div class="menu_button" data-act="cancel">Cancel</div></div>
+    </div>`;
 }
 
 // A proposal about a new NPC also brings that NPC into the scene.
