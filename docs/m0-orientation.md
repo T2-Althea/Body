@@ -50,7 +50,9 @@ SillyTavern server with a fake backend, not just by reading code.
   text are ignored. The same rule handles edited messages. As a second guard,
   clear our key on `GENERATION_STARTED` when `type === 'swipe'`.
 - Deleting messages simply removes their `extra`. Branches (new chat file from a
-  message) copy messages with their `extra`. So **rebuilding the body by
+  message) copy messages with their `extra` (verified in e2e-m5), but start with
+  fresh chat metadata (`{ main_chat, integrity }`), so nothing stored only in
+  `chatMetadata` survives a branch. So **rebuilding the body by
   replaying `extra` records from message 0 to the end** naturally follows
   delete, swipe, edit and branch. That is the core design decision for M1/M5.
 - Relevant events: `MESSAGE_SENT`, `MESSAGE_RECEIVED`, `MESSAGE_EDITED`,

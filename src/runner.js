@@ -4,7 +4,7 @@
 import { buildDetectPrompt, buildFillPrompt, mightMatter, parseDetection } from './detect.js';
 import { callModel, describeFailure, extractJson } from './llm.js';
 import { fingerprint } from './model.js';
-import { addPending, buildBodies, getSceneMembers, writeDetectedOps } from './store.js';
+import { addPending, buildBodies, getSceneMembers, pruneStale, writeDetectedOps } from './store.js';
 
 const ctx = () => SillyTavern.getContext();
 
@@ -34,12 +34,15 @@ function setBusy(delta) {
     opts.onChange?.();
 }
 
-/** Called for MESSAGE_SENT / MESSAGE_RECEIVED. */
-export function onNewMessage(index, type) {
+/** Called for MESSAGE_SENT / MESSAGE_RECEIVED / MESSAGE_EDITED. */
+export async function onNewMessage(index, type) {
+    const msg = ctx().chat[index];
+    // A regenerated swipe inherits the previous swipe's data, and an edited
+    // message keeps data read from its old text: clear what no longer matches.
+    if (msg && await pruneStale(msg)) opts.onChange?.();
     const s = opts.getSettings();
     if (!s.enabled || s.detectMode === 'off' || s.detectMode === 'manual') return;
     if (type === 'first_message') return;
-    const msg = ctx().chat[index];
     if (!msg || msg.is_system) return;
     if (msg.is_user && !s.detectUser) return;
     if (s.detectPrefilter && !mightMatter(msg.mes)) return;
@@ -70,7 +73,8 @@ async function detect(msg, { manual }) {
     const i = c.chat.indexOf(msg);
     if (i < 0) return;
     const fp = fingerprint(msg.mes);
-    const swipe = msg.swipe_id;
+    // A fresh reply has no swipe_id until SillyTavern sets it to 0 a moment later.
+    const swipe = msg.swipe_id ?? 0;
     const members = getSceneMembers();
     const prev = opts.getSettings().detectContext ? c.chat.slice(0, i).reverse().find(m => !m.is_system) : null;
     const { system, user, ids } = buildDetectPrompt({
@@ -100,7 +104,7 @@ async function detect(msg, { manual }) {
         return;
     }
     // The message may have been deleted, edited or swiped while we waited.
-    if (!c.chat.includes(msg) || fingerprint(msg.mes) !== fp || msg.swipe_id !== swipe) return;
+    if (!c.chat.includes(msg) || fingerprint(msg.mes) !== fp || (msg.swipe_id ?? 0) !== swipe) return;
 
     const { proposals, skipped } = parseDetection(json, { members, index, ids });
     if (skipped.length) console.debug('[Body HUD] detection skipped:', skipped);

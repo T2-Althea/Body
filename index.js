@@ -56,11 +56,11 @@ async function loadTemplate() {
 }
 
 /** The note for the current chat, or an empty one. */
-function computeNote() {
+function computeNote({ skipDetectedAt = -1 } = {}) {
     const s = getSettings();
     if (!s.enabled || !templateIndex || !hasOpenChat()) return { text: '', tokens: 0, omitted: 0 };
     const members = getSceneMembers().filter(m => !m.muted);
-    return buildNote(members, buildBodies(), templateIndex, {
+    return buildNote(members, buildBodies({ skipDetectedAt }), templateIndex, {
         budget: Number(s.budget) || 200,
         tempUnit: s.tempUnit,
         tempInNote: s.tempInNote,
@@ -69,16 +69,21 @@ function computeNote() {
 
 // Sets (or clears) the note. It occupies one slot that is replaced every time,
 // so only the current note is ever in the prompt.
-function updateInjection() {
+function updateInjection(options) {
     const s = getSettings();
-    const text = s.inject ? computeNote().text : '';
+    const text = s.inject ? computeNote(options).text : '';
     ctx().setExtensionPrompt(MODULE, text, Number(s.position), Number(s.depth), false, Number(s.role));
 }
 
 // Called by SillyTavern right before every generation (manifest: generate_interceptor).
-globalThis.bodyHudInterceptor = async function () {
+globalThis.bodyHudInterceptor = async function (_chat, _contextSize, _abort, type) {
     try {
-        updateInjection();
+        // A swipe or regenerate replaces the last reply, so that reply's detected
+        // wounds must not be in the prompt for its replacement.
+        const chat = ctx().chat;
+        const last = chat[chat.length - 1];
+        const replacing = type === 'swipe' || (type === 'regenerate' && last && !last.is_user);
+        updateInjection({ skipDetectedAt: replacing ? chat.length - 1 : -1 });
     } catch (e) {
         console.error('[Body HUD] failed to build the status note', e);
     }
@@ -292,5 +297,7 @@ jQuery(async () => {
     }
     eventSource.on(eventTypes.MESSAGE_RECEIVED, (id, type) => onNewMessage(Number(id), type));
     eventSource.on(eventTypes.MESSAGE_SENT, id => onNewMessage(Number(id), 'user'));
+    // An edited message is checked again from its new text.
+    eventSource.on(eventTypes.MESSAGE_EDITED, id => onNewMessage(Number(id), 'edited'));
     console.log('[Body HUD] loaded');
 });

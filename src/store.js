@@ -42,18 +42,30 @@ function baseline() {
     return meta?.[EXTRA_KEY]?.ops || [];
 }
 
-/** All records in chat order. */
-export function collectRecords() {
+// Detected changes carry the fingerprint of the text they were read from. If the
+// message now says something else (edited, or a regenerated swipe that inherited
+// the old swipe's data), they no longer apply. Manual changes have no
+// fingerprint and always apply.
+const isLive = (item, text) => !item.fp || item.fp === fingerprint(text);
+
+/**
+ * All records in chat order.
+ * @param {{ skipDetectedAt?: number }} [options] ignore detected changes on this
+ *   message (the reply being regenerated must not see wounds it caused itself)
+ */
+export function collectRecords({ skipDetectedAt = -1 } = {}) {
     const records = [{ index: -1, ops: baseline() }];
     ctx().chat.forEach((m, i) => {
         const rec = m?.extra?.[EXTRA_KEY];
-        if (rec && Array.isArray(rec.ops) && rec.ops.length) records.push({ index: i, ops: rec.ops });
+        if (!rec || !Array.isArray(rec.ops) || !rec.ops.length) return;
+        const ops = rec.ops.filter(op => isLive(op, m.mes) && !(op.fp && i === skipDetectedAt));
+        if (ops.length) records.push({ index: i, ops });
     });
     return records;
 }
 
-export function buildBodies() {
-    return replay(collectRecords());
+export function buildBodies(options) {
+    return replay(collectRecords(options));
 }
 
 function pushOps(extra, ops, mes) {
@@ -123,7 +135,9 @@ export async function addPending(msg, proposals, fp) {
 export function collectPending() {
     const out = [];
     ctx().chat.forEach((m, index) => {
-        for (const p of m?.extra?.[EXTRA_KEY]?.pending || []) out.push({ index, ...p });
+        for (const p of m?.extra?.[EXTRA_KEY]?.pending || []) {
+            if (isLive(p, m.mes)) out.push({ index, ...p });
+        }
     });
     return out;
 }
@@ -161,4 +175,23 @@ export async function undoOp(index, oid) {
     if (!msg) return;
     for (const rec of currentCopies(msg)) rec.ops = rec.ops.filter(o => o.oid !== oid);
     await ctx().saveChat();
+}
+
+/**
+ * Drops detected changes and proposals that no longer match the message's text
+ * (current swipe only; other swipes keep their own). Manual changes stay.
+ * @returns {Promise<boolean>} whether anything was removed
+ */
+export async function pruneStale(msg) {
+    if (!msg?.extra?.[EXTRA_KEY]) return false;
+    let changed = false;
+    for (const rec of currentCopies(msg)) {
+        const ops = rec.ops.filter(op => isLive(op, msg.mes));
+        const pending = (rec.pending || []).filter(p => isLive(p, msg.mes));
+        if (ops.length !== rec.ops.length || pending.length !== (rec.pending || []).length) changed = true;
+        rec.ops = ops;
+        rec.pending = pending;
+    }
+    if (changed) await ctx().saveChat();
+    return changed;
 }

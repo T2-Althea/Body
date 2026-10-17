@@ -46,8 +46,13 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
       `src: 'detect'|'review'`, `fp` and `oid` (undo removes by oid). Detected ops
       go on the current swipe only; manual ops on all swipes. Greeting
       (`first_message`) is never auto-checked.
-- [ ] M5 Swipe/branch handling: ignore detected ops/pending whose `fp` doesn't
-      match the message text (edits, inherited swipes); clear them on regen.
+- [x] M5 Swipe/branch handling. Detected ops/pending only count while their `fp`
+      matches the message text (`isLive` in store.js); `pruneStale` clears the
+      rest on MESSAGE_RECEIVED/SENT/EDITED; an edited message is re-checked. The
+      generate interceptor skips the last message's detected ops for `swipe` (and
+      `regenerate` of an AI message) so a replacement reply doesn't see wounds the
+      replaced one caused. Branches copy messages (and their extra) but not chat
+      metadata, so the no-messages baseline in chatMetadata doesn't carry over.
 - [ ] M6 Time skips and realism levels.
 - [ ] M7 Template editor and NPC bodies.
 

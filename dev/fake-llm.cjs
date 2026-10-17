@@ -7,6 +7,18 @@ const fs = require('fs');
 const port = Number(process.argv[2] || 5001);
 const logFile = process.argv[3] || 'fake-llm-requests.jsonl';
 let n = 0;
+// If the user's message contains ARROW_REPLY, the first reply to it describes an
+// arrow wound (so detection fires on the AI's message) and later swipes don't.
+const arrowReplied = new Set();
+function chatReply(messages, n) {
+    const lastUser = [...(messages || [])].reverse().find(m => m.role === 'user');
+    const text = String(lastUser?.content ?? '');
+    if (text.includes('ARROW_REPLY') && !arrowReplied.has(text)) {
+        arrowReplied.add(text);
+        return 'An arrow hits Seraphina in the left thigh.';
+    }
+    return `Fake reply number ${n}.`;
+}
 
 // Canned answers for Body HUD's detection and ✨ fill requests (null = normal chat).
 function taskReply(all) {
@@ -51,7 +63,7 @@ http.createServer((req, res) => {
             const exhausted = task !== null && newMessage.includes('think too long');
             return res.end(JSON.stringify({
                 id: 'fake-' + n, object: 'chat.completion', model: 'fake-model',
-                choices: [{ index: 0, finish_reason: exhausted ? 'length' : 'stop', message: { role: 'assistant', content: exhausted ? '' : (task ?? `Fake reply number ${n}.`) } }],
+                choices: [{ index: 0, finish_reason: exhausted ? 'length' : 'stop', message: { role: 'assistant', content: exhausted ? '' : (task ?? chatReply(data.messages, n)) } }],
                 usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
             }));
         }

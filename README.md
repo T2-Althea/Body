@@ -4,7 +4,7 @@ A SillyTavern extension that keeps track of what has physically happened to the
 characters in a scene (wounds, missing limbs, being soaked and freezing, exhaustion)
 and will remind the AI with a short note before each reply.
 
-**Status: early development (M4).** You record conditions by hand in the HUD, and
+**Status: early development (M5).** You record conditions by hand in the HUD, and
 a short status note is sent to the AI before each reply. Automatic detection comes
 later. See `docs/concept.md` for the plan.
 
@@ -27,8 +27,13 @@ Requires SillyTavern 1.19.0 or newer.
   swelling…), a missing part, a whole-body state (wet, cold, exhausted…;
   optionally limited to an area like "left foot"), or a mental condition.
   **Temperature** sets body temperature.
-- Changes are saved on the latest message. Deleting that message removes them;
-  swiping between replies keeps them.
+- Changes you make by hand are saved on the latest message. Deleting that message
+  removes them; swiping between replies keeps them.
+- Detected changes belong to the exact reply they were read from: swipe to
+  another reply and they go away, swipe back and they return. Regenerating a
+  reply never shows the new attempt the wounds the old one caused. Editing a
+  message drops what was read from the old text and checks the new text.
+  Branches keep everything up to the branch point.
 
 ## Automatic detection
 After each message that mentions something physical (wounds, blood, falling, cold,
