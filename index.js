@@ -3,7 +3,8 @@
 // matter which folder it is installed into.
 
 import { openFeatureEditor } from './src/editor.js';
-import { DEFAULT_NATURAL_STATES, customFeatureFile, expandTemplate, mergeFeatureFiles, withFeatures } from './src/model.js';
+import { DEFAULT_NATURAL_STATES, customFeatureFile, expandTemplate, mergeFeatureFiles, missingParts, withFeatures } from './src/model.js';
+import { describeClothes } from './src/clothing.js';
 import { normalizeMeters } from './src/meters.js';
 import { buildNote, estimateTokens } from './src/note.js';
 import { applyLayout, initPanel, render } from './src/panel.js';
@@ -401,6 +402,27 @@ function setupProfileDropdown() {
     });
 }
 
+// {{outfit}} / {{user_outfit}}: what someone wears in this chat, for use inside
+// the character card or persona description. SillyTavern replaces them when it
+// builds the prompt, so the card's own text never changes.
+function outfitText(isUser) {
+    if (!templateIndex || !hasOpenChat()) return '';
+    const members = getSceneMembers();
+    const c = ctx();
+    const m = isUser ? members.find(x => x.isUser) : members.find(x => !x.isUser && !x.npc && x.name === c.name2) || members.find(x => !x.isUser && !x.npc);
+    const body = m ? buildBodies().get(m.key) : null;
+    return body?.clothes ? describeClothes(body.clothes, missingParts(body, templateIndex)) : '';
+}
+
+function registerMacros() {
+    try {
+        ctx().registerMacro('outfit', () => outfitText(false), 'Body HUD: what the character is wearing in this chat');
+        ctx().registerMacro('user_outfit', () => outfitText(true), 'Body HUD: what your persona is wearing in this chat');
+    } catch (e) {
+        console.warn('[Body HUD] could not register macros', e);
+    }
+}
+
 function refresh() {
     render();
     updateInjection();
@@ -446,6 +468,7 @@ jQuery(async () => {
         },
     });
     updateInjection();
+    registerMacros();
 
     for (const ev of [
         eventTypes.CHAT_CHANGED, eventTypes.CHAT_LOADED, eventTypes.MESSAGE_SENT, eventTypes.MESSAGE_RECEIVED,

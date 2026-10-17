@@ -1259,6 +1259,7 @@ function renderClothing(body, index) {
         <summary class="bh-section-title">Clothing${worn.length ? ` (${worn.length})` : ''}</summary>
         ${rows || '<div class="bh-empty">Nothing recorded.</div>'}
         <div class="bh-outfits">${picker}</div>
+        <div class="bh-cond-meta" title="SillyTavern swaps the placeholder for the current clothes when it sends the description; the card itself doesn't change.">Tip: write <code>{{outfit}}</code> in a character's description (or <code>{{user_outfit}}</code> in your persona) to put the current clothes there.</div>
         <div class="bh-actions">
             <div class="menu_button bh-small" data-act="wear-new"><i class="fa-solid fa-plus"></i> Item</div>
             <div class="menu_button bh-small" data-act="outfit-save-form" title="Save what's worn now as a named outfit">Save as outfit</div>

@@ -151,6 +151,20 @@ const { check, finish } = makeChecker();
     check('approved: replaces the outerwear', (await clothRows()).some(r => r.includes('Red cloak') && r.includes('Wool')) && !(await clothRows()).some(r => r.includes('Silver gown')));
     await setSetting('#body_hud_detect_mode', 'manual');
 
+    // {{outfit}} inside the card's description: replaced when the prompt is built.
+    check('{{outfit}} macro gives the current clothes', (await page.evaluate(async () => (await SillyTavern.getContext().executeSlashCommandsWithOptions('/pass {{outfit}}')).pipe)) === 'linen tunic, red cloak (wool), leather boots');
+    const original = await page.evaluate(() => {
+        const c = SillyTavern.getContext();
+        const ch = c.characters[c.characterId];
+        const before = ch.description;
+        ch.description += '\n[Currently wearing: {{outfit}}]';
+        return before;
+    });
+    await sendMessage(page, reqLog, 'We rest by the fire.');
+    const sent = require('fs').readFileSync(reqLog, 'utf8').trim().split('\n').pop();
+    check('the description sent to the AI has the clothes', sent.includes('[Currently wearing: linen tunic, red cloak (wool), leather boots]'));
+    await page.evaluate(before => { const c = SillyTavern.getContext(); c.characters[c.characterId].description = before; }, original);
+
     // Old changes drop out of the note in "recent" mode.
     for (let i = 0; i < 6; i++) await sendMessage(page, reqLog, `Walking on, step ${i}.`);
     check('Wearing line gone a while after the last change', !(await note()).includes('Wearing'));

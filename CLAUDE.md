@@ -140,6 +140,8 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
   Panel: collapsible Clothing section (`settings.clothesOpen`), item form, outfit
   picker / Wear / Save as outfit / Take all off. Detection: "wearing:" state and
   action `wear` (`settings.detectClothes`), reviewed like other proposals.
+  Macros `{{outfit}}` (current character by name2) / `{{user_outfit}}` (index.js
+  `registerMacros`) for use inside card/persona descriptions.
   Not done yet: wet clothing → wet state, armor covering regions.
   e2e for mood + clothing: `dev/e2e-extras.cjs`; unit: `tests/extras.test.mjs`.
   Original request:
