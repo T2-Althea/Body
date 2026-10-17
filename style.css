@@ -4,6 +4,13 @@
     margin: 4px 0;
 }
 
+.body-hud-settings .bh-setting-col {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 6px 0;
+}
+
 .body-hud-settings .bh-setting-row {
     display: flex;
     align-items: center;
@@ -267,6 +274,68 @@
 .bh-row {
     display: flex;
     gap: 6px;
+}
+
+/* Condition form: category first, then only that category's fields. */
+.bh-cats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    margin: 4px 0 6px;
+}
+
+.bh-cats .menu_button,
+.bh-subs .menu_button {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 4px 2px;
+    text-align: center;
+    justify-content: center;
+    font-size: 0.9em;
+}
+
+.bh-subs {
+    display: flex;
+    gap: 4px;
+    margin: 0 0 6px;
+}
+
+.bh-subs .menu_button {
+    flex: 1;
+}
+
+#body_hud_panel .bh-form .bh-cat.bh-active,
+#body_hud_panel .bh-form .bh-sub.bh-active,
+#body_hud_panel .bh-form .bh-cat.bh-active:hover,
+#body_hud_panel .bh-form .bh-sub.bh-active:hover {
+    opacity: 1;
+    filter: none;
+    background: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeBlurTintColor, #000);
+    font-weight: bold;
+}
+
+.bh-progress {
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    padding: 2px 8px 6px;
+    margin: 6px 0;
+}
+
+.bh-progress legend {
+    font-size: 0.85em;
+    opacity: 0.8;
+    padding: 0 4px;
+    width: auto;
+    margin: 0;
+    border: none;
+}
+
+.bh-f-endwho-text {
+    display: block;
+    padding-top: 8px;
+    opacity: 0.85;
 }
 
 .bh-row > label {

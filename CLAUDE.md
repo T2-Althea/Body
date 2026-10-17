@@ -116,33 +116,29 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
   only when relevant. Later ties: wet clothing → wet state, armor covers regions,
   missing parts can't wear items. M4 detection can propose clothing changes.
 
-## Next up: condition form redesign (user request, do before the other extras)
-The mannequin navigation is fine; the "+ Condition" form is awkward (one long
-form, Kind dropdown first, many fields irrelevant per kind). Redesign:
-- **Four categories instead of the Kind dropdown:** Body (on a part / missing;
-  merges injury + whole-body state with optional area), Mind (one entry with a
-  Lasting / Current toggle), Status effect (poison, medicine effects and side
-  effects, magic-induced enhancement or curse…: new kind, whole-body, with an
-  intensity and optional duration), Mark (tattoo/paint, keep as is). Pick the
-  category first (tabs or 4 buttons), then show only that category's fields.
-- **One "progress" block per entry:** severity, bleeding (body only), status,
-  and duration together.
-- **Duration in replies (experimental, opt-in per entry):** "clears / heals in
-  N replies from <affected character>": count that character's messages after
-  the entry's message during replay; when reached, treat as removed (or one
-  stage healed). Must stay derived from the chat (works with swipes/deletes).
-- **Natural / cyclical body states (no severity/bleeding/status):** a
-  "Natural" option under Body that hides those fields. Female: period
-  (menstruation), ovulation, pregnancy (with stage/trimester), lactation,
-  menopause. Male: suggestions offered were andropause (age-related low
-  testosterone), and for fantasy settings rut/heat (both sexes); user isn't
-  sure what else, keep the list editable. Filter by the body's sex like parts.
-- **Pain level** field (none / mild / moderate / severe / agonizing), manual or
-  ✨-suggested from the condition ("pick the logical one").
-- **✨ for "What" too:** fully random suggestion fitting the part, category and
-  recent story (today ✨ only fills Effect/Details/Cause).
-- Keep old records working: map existing kinds (injury, missing, state,
-  mind_lasting, mind_current, mark) onto the new categories without migration.
+## Condition form redesign (done, after M7; user request)
+- Form picks a category first (`CATEGORIES`: Body / Mind / Status effect / Mark),
+  then shows only its fields (`updateFormFields` in panel.js). Body has sub-tabs
+  On the body / Missing part / Natural; Mind has Current / Lasting. Stored kinds
+  are unchanged for old records (`categoryOf`, `bodySubOf` map them); new kinds
+  `effect` (status effect, whole body, severity shown as Intensity Mild…
+  Overwhelming) and `natural` (period, pregnancy…, optional `stage`, no
+  severity/bleeding/status). Body "On the body": empty Where → `state`; a part →
+  `injury`, unless the type is a BODY_STATES name or it was already a state.
+- Progress block: severity, bleeding, status, `pain` (PAIN_LEVELS, optional), and
+  Ends: `endReplies` (+ `endThen` 'clear'|'heal' for wounds) or `endDays` (not
+  for wounds; time skips use `progress` towards it, `daysLeft`).
+- Reply durations are derived in `replay(records, speakers)`: store.js
+  `collectSpeakers` gives who wrote each message; a message counts before the ops
+  recorded on it; counts only the affected body's own messages (NPCs: every
+  non-user message). Changing `endReplies` restarts the count (`endCount`). The
+  interceptor's skipDetectedAt also skips that message's count.
+- Natural states list: `settings.naturalStates` text, "Name (female|male|any):
+  stage, stage" (`parseNaturalStates`), filtered by the body's sex.
+- ✨ What (`fields: ['type']`) invents a fitting condition; ✨ pain picks a level;
+  "Fill empty" includes What and pain. `buildFillPrompt` asks only for the
+  requested fields; the fake backend answers only those.
+- e2e: `dev/e2e-form.cjs`; unit: `tests/conditions.test.mjs`.
 
 ## How we work (user's workflow)
 - The user plays on their own SillyTavern; this repo is installed there from the

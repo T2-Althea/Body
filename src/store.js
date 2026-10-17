@@ -73,8 +73,24 @@ export function collectRecords({ skipDetectedAt = -1 } = {}) {
     return records;
 }
 
+/**
+ * Who wrote each message (body keys), for "ends after N replies" durations. A
+ * reply being regenerated (skipAt) doesn't count: it's about to be replaced.
+ */
+export function collectSpeakers({ skipAt = -1 } = {}) {
+    const c = ctx();
+    const solo = c.characterId !== undefined ? c.characters[c.characterId]?.avatar : null;
+    const out = [];
+    c.chat.forEach((m, index) => {
+        if (!m || m.is_system || index === skipAt) return;
+        const avatar = m.original_avatar || solo;
+        out.push({ index, who: m.is_user ? USER_KEY : avatar ? 'c:' + avatar : 'ai' });
+    });
+    return out;
+}
+
 export function buildBodies(options) {
-    return replay(collectRecords(options));
+    return replay(collectRecords(options), collectSpeakers({ skipAt: options?.skipDetectedAt ?? -1 }));
 }
 
 function pushOps(extra, ops, mes) {

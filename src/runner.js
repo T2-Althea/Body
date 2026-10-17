@@ -132,13 +132,13 @@ async function detect(msg, { manual }) {
 }
 
 /**
- * Asks the model for effect/details/cause. Returns the suggestion object.
- * @param {{ characterName: string, cond: object, partLabel: string }} input
+ * Asks the model for some fields of a condition. Returns the suggestion object.
+ * @param {{ characterName: string, cond: object, partLabel: string, fields: string[], category: string }} input
  */
-export async function suggestFields({ characterName, cond, partLabel }) {
+export async function suggestFields({ characterName, cond, partLabel, fields, category }) {
     const chat = ctx().chat.filter(m => !m.is_system).slice(-4);
     const recentChat = chat.map(m => `${m.name}: ${String(m.mes).slice(0, 700)}`).join('\n\n');
-    const { system, user } = buildFillPrompt({ characterName, cond, partLabel, recentChat });
+    const { system, user } = buildFillPrompt({ characterName, cond, partLabel, recentChat, fields, category });
     setBusy(1);
     try {
         const raw = await callModel(modelChoice(), system, user, maxTokens());

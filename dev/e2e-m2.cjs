@@ -44,7 +44,7 @@ const noteIndex = msgs => msgs.findIndex(m => String(m.content).startsWith(HEADE
     // Add a wound.
     await page.locator('.bh-member', { hasText: 'Seraphina' }).click();
     await page.click('[data-act="add"]');
-    await page.selectOption('#bh_f_kind', 'injury');
+    await page.click('.bh-cat[data-cat="body"]');
     await page.selectOption('#bh_f_part', 'left_thigh');
     await page.fill('#bh_f_type', 'Arrow wound');
     await page.selectOption('#bh_f_sev', 'moderate');
@@ -80,7 +80,7 @@ const noteIndex = msgs => msgs.findIndex(m => String(m.content).startsWith(HEADE
     await page.click('[data-act="save-temp"]');
     await page.locator('.bh-member', { hasText: 'User' }).click();
     await page.click('[data-act="add"]');
-    await page.selectOption('#bh_f_kind', 'injury');
+    await page.click('.bh-cat[data-cat="body"]');
     await page.selectOption('#bh_f_part', 'abdomen');
     await page.fill('#bh_f_type', 'Stab wound');
     await page.selectOption('#bh_f_sev', 'severe');

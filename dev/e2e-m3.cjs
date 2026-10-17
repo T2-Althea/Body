@@ -50,7 +50,7 @@ const { check, finish } = makeChecker();
     // Add from a part's "+".
     await page.locator('.bh-zrow:has(.bh-zname:text-is("Left thigh")) .bh-zadd').click();
     check('form opens with the part preselected', await page.inputValue('#bh_f_part') === 'left_thigh');
-    check('kind is "On a body part"', (await page.locator('#bh_f_kind option:checked').innerText()) === 'On a body part');
+    check('category is Body → On the body', (await page.locator('.bh-cat.bh-active').innerText()) === 'Body' && (await page.locator('.bh-sub.bh-active').innerText()) === 'On the body');
     await page.fill('#bh_f_type', 'Arrow wound');
     await page.selectOption('#bh_f_sev', 'severe');
     await page.click('[data-act="save"]');
@@ -64,7 +64,8 @@ const { check, finish } = makeChecker();
     await page.click('.bh-zlink:has-text("Right foot")');
     check('nested region link zooms further', (await page.locator('.bh-zoom-head b').innerText()) === 'Right foot');
     await page.locator('.bh-zrow:has(.bh-zname:text-is("Right foot (general)")) .bh-zadd').click();
-    await page.selectOption('#bh_f_kind', 'missing');
+    await page.click('.bh-cat[data-cat="body"]');
+    await page.click('.bh-sub[data-sub="missing"]');
     await page.click('[data-act="save"]');
     await page.waitForTimeout(300);
     check('missing foot greys out its parts', await page.locator('.bh-zrow.bh-zmissing').count() >= 5);
@@ -82,8 +83,8 @@ const { check, finish } = makeChecker();
 
     // Whole-body state narrowed to an area.
     await page.click('.bh-actions [data-act="add"]');
-    await page.selectOption('#bh_f_kind', 'state');
-    check('state form offers an optional area', await page.locator('.bh-f-part').isVisible() && (await page.locator('.bh-f-part-label').innerText()) === 'Area (optional)');
+    await page.click('.bh-cat[data-cat="body"]');
+    check('body form offers "Where" (whole body or an area)', await page.locator('.bh-f-part').isVisible() && (await page.locator('.bh-f-part-label').innerText()) === 'Where');
     await page.fill('#bh_f_type', 'Wet');
     await page.selectOption('#bh_f_part', 'left_foot');
     await page.click('[data-act="save"]');
@@ -92,7 +93,7 @@ const { check, finish } = makeChecker();
     check('state chip names the area', text.includes('Wet · Left foot'));
     check('note says where the state applies', (await page.locator('.bh-note-text').innerText()).includes('- States: wet (left foot).'));
     await page.click('.bh-actions [data-act="add"]');
-    await page.selectOption('#bh_f_kind', 'state');
+    await page.click('.bh-cat[data-cat="body"]');
     await page.fill('#bh_f_type', 'Exhausted');
     await page.click('[data-act="save"]');
     await page.waitForTimeout(300);
@@ -101,7 +102,7 @@ const { check, finish } = makeChecker();
 
     // Mind conditions don't tint the head.
     await page.click('.bh-actions [data-act="add"]');
-    await page.selectOption('#bh_f_kind', 'mind_current');
+    await page.click('.bh-cat[data-cat="mind"]');
     await page.fill('#bh_f_type', 'Panicked');
     await page.selectOption('#bh_f_sev', 'critical');
     await page.click('[data-act="save"]');

@@ -7,7 +7,7 @@
 // - hidden conditions are marked so others don't notice them;
 // - a hard token budget, cutting the least important lines first.
 
-import { BODY_PART, severityRank } from './model.js';
+import { BODY_PART, INTENSITY_LABELS, severityRank } from './model.js';
 
 export const NOTE_HEADER = '[Body status — in effect right now]';
 
@@ -37,6 +37,8 @@ export function isTrivial(c) {
     return c.kind === 'injury' && c.severity === 'minor' && (c.status === 'scarred' || c.status === 'healing');
 }
 
+const painText = c => (c.pain && c.pain !== 'none' ? `${c.pain} pain` : null);
+
 function hiddenTag(c) {
     return c.hidden ? ' Hidden: others don\'t know; it only shows in behavior.' : '';
 }
@@ -47,8 +49,16 @@ function conditionLine(c, partName, opts = {}) {
         case 'missing':
             return {
                 prio: 60,
-                text: `${partName(c.part)} missing${c.cause ? ` (${lc(c.cause)})` : ''}.${c.effect ? ' ' + endDot(c.effect) : ''}${hiddenTag(c)}`,
+                text: `${partName(c.part)} missing${c.cause ? ` (${lc(c.cause)})` : ''}${painText(c) ? `, ${painText(c)}` : ''}.${c.effect ? ' ' + endDot(c.effect) : ''}${hiddenTag(c)}`,
             };
+        case 'effect': {
+            const bits = [lc(c.type), c.severity ? lc(INTENSITY_LABELS[c.severity] || c.severity) : null, c.details ? lc(c.details) : null, painText(c)].filter(Boolean);
+            return { prio: 45 + Math.max(0, severityRank(c.severity)) * 8, text: `Effect: ${bits.join(', ')}.${c.effect ? ' ' + endDot(c.effect) : ''}${hiddenTag(c)}` };
+        }
+        case 'natural': {
+            const bits = [lc(c.type), c.stage ? lc(c.stage) : null, c.details ? lc(c.details) : null, painText(c)].filter(Boolean);
+            return { prio: 35, text: `Natural: ${bits.join(', ')}.${c.effect ? ' ' + endDot(c.effect) : ''}${hiddenTag(c)}` };
+        }
         case 'mind_lasting':
             return { prio: 55, text: `Mind (lasting): ${lc(c.type)}.${c.effect ? ' ' + endDot(c.effect) : ''}${hiddenTag(c)}` };
         case 'mind_current':
@@ -59,6 +69,7 @@ function conditionLine(c, partName, opts = {}) {
             if (c.status && c.status !== 'fresh') bits.push(c.status);
             if (c.details) bits.push(lc(c.details));
             if (c.bleeding && c.bleeding !== 'none') bits.push(`${c.bleeding} bleeding`);
+            if (painText(c)) bits.push(painText(c));
             // Grounded/simulation: an untreated, bleeding wound is called out so the AI keeps it in mind.
             const untreatedBleeding = (!c.status || c.status === 'fresh') && c.bleeding && c.bleeding !== 'none';
             if (untreatedBleeding && opts.realism && opts.realism !== 'cinematic') bits.push('untreated');
@@ -78,7 +89,7 @@ function wholeBodyLine(states, temp, opts, partName) {
     const showTemp = temp !== null && (opts.tempInNote === 'always' || isAbnormalTemp(temp));
     if (!states.length && !showTemp) return null;
     const local = s => s.part && s.part !== BODY_PART;
-    const names = states.map(s => lc(s.type) + (local(s) ? ` (${lc(partName(s.part))})` : '') + (s.hidden ? ' (hidden)' : ''));
+    const names = states.map(s => lc(s.type) + (local(s) ? ` (${lc(partName(s.part))})` : '') + (painText(s) ? ` (${painText(s)})` : '') + (s.hidden ? ' (hidden)' : ''));
     const parts = [];
     if (names.length) parts.push(names.join(', '));
     if (showTemp) parts.push(`temperature ${formatTemp(temp, opts.tempUnit)} (${tempLabel(temp)})`);

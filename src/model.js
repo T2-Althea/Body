@@ -13,7 +13,62 @@ export const KINDS = {
     mind_lasting: 'Mind: lasting condition',
     mind_current: 'Mind: current state',
     mark: 'Mark (tattoo, body paint, brand…)',
+    natural: 'Natural body state',
+    effect: 'Status effect',
 };
+
+// The condition form groups kinds into four categories. Old records keep their
+// kind; categoryOf() maps them, so nothing needs migrating.
+export const CATEGORIES = {
+    body: 'Body',
+    mind: 'Mind',
+    effect: 'Status effect',
+    mark: 'Mark',
+};
+export function categoryOf(c) {
+    const kind = c?.kind;
+    if (kind === 'mind_lasting' || kind === 'mind_current') return 'mind';
+    if (kind === 'effect') return 'effect';
+    if (kind === 'mark') return 'mark';
+    return 'body';
+}
+/** Within Body: 'part' (on a part or whole body), 'missing' or 'natural'. */
+export function bodySubOf(c) {
+    return c?.kind === 'missing' ? 'missing' : c?.kind === 'natural' ? 'natural' : 'part';
+}
+
+export const PAIN_LEVELS = ['none', 'mild', 'moderate', 'severe', 'agonizing'];
+// Status effects use the severity scale, under friendlier names.
+export const INTENSITY_LABELS = { minor: 'Mild', moderate: 'Moderate', severe: 'Strong', critical: 'Overwhelming' };
+
+// Natural / cyclical states offered in the form. Editable in the settings, one per line:
+//   Name (female|male|any): stage, stage…
+export const DEFAULT_NATURAL_STATES = [
+    'Period (female): Light, Heavy',
+    'Ovulation (female)',
+    'Pregnancy (female): First trimester, Second trimester, Third trimester, In labor',
+    'Lactation (female)',
+    'Menopause (female)',
+    'Andropause (male)',
+    'Heat (any)',
+    'Rut (any)',
+].join('\n');
+
+/** @returns {{ name: string, sex: 'female'|'male'|null, stages: string[] }[]} */
+export function parseNaturalStates(text) {
+    const out = [];
+    for (const line of String(text ?? '').split('\n')) {
+        const m = line.trim().match(/^([^(:]+?)\s*(?:\(\s*(female|male|any)\s*\))?\s*(?::\s*(.*))?$/i);
+        if (!m || !m[1]) continue;
+        const sex = (m[2] || 'any').toLowerCase();
+        out.push({
+            name: m[1].trim(),
+            sex: sex === 'any' ? null : sex,
+            stages: String(m[3] || '').split(',').map(x => x.trim()).filter(Boolean),
+        });
+    }
+    return out;
+}
 // How long a mark lasts.
 export const MARK_DURATIONS = { permanent: 'Permanent', temporary: 'Temporary (fades in a few days)' };
 export const SEXES = { unspecified: 'Unspecified', female: 'Female', male: 'Male' };
@@ -81,7 +136,7 @@ export function applyOp(bodies, op, messageIndex) {
     const body = bodies.get(op.who);
     switch (op.t) {
         case 'add':
-            if (op.cond?.id) body.conditions.set(op.cond.id, { ...op.cond, since: messageIndex });
+            if (op.cond?.id) body.conditions.set(op.cond.id, { ...op.cond, since: messageIndex, endCount: 0 });
             break;
         case 'edit': {
             const c = body.conditions.get(op.id);
@@ -89,6 +144,8 @@ export function applyOp(bodies, op, messageIndex) {
             const next = { ...c, ...op.changes, id: c.id, since: c.since };
             // Healing progress counts days in the current stage; a new stage starts at zero.
             if (op.changes.status && op.changes.status !== c.status && !('progress' in op.changes)) next.progress = 0;
+            // A new reply count starts over.
+            if ('endReplies' in op.changes && (op.changes.endReplies ?? null) !== (c.endReplies ?? null)) next.endCount = 0;
             body.conditions.set(op.id, next);
             break;
         }
@@ -114,16 +171,55 @@ export function applyOp(bodies, op, messageIndex) {
     }
 }
 
+/** The next healing stage, or null when the condition is gone. */
+export function nextStage(c) {
+    if (c.status === 'healing') return severityRank(c.severity) <= 0 ? null : { status: 'scarred', severity: 'minor', bleeding: 'none' };
+    if (!c.status || c.status === 'fresh' || c.status === 'treated') return { status: 'healing', bleeding: 'none' };
+    return null; // scarred, permanent
+}
+
+// Whether a message by `speaker` counts towards a body's reply durations. NPCs
+// don't write messages, so every AI reply counts for them.
+const countsFor = (bodyKey, speaker) => speaker === bodyKey || (bodyKey.startsWith('n:') && speaker !== 'user');
+
+/** One message was written: advance "ends after N replies" counters. */
+function tick(bodies, speaker) {
+    for (const [key, body] of bodies) {
+        if (!countsFor(key, speaker)) continue;
+        for (const c of [...body.conditions.values()]) {
+            if (!(c.endReplies > 0)) continue;
+            c.endCount = (c.endCount || 0) + 1;
+            if (c.endCount < c.endReplies) continue;
+            const next = c.endThen === 'heal' ? nextStage(c) : null;
+            if (next) body.conditions.set(c.id, { ...c, ...next, progress: 0, endReplies: null, endCount: 0, endThen: null });
+            else body.conditions.delete(c.id);
+        }
+    }
+}
+
 /**
  * Rebuilds every body from scratch.
  * @param {{ index: number, ops: object[] }[]} records in chat order (index -1 = chat baseline)
+ * @param {{ index: number, who: string }[]} [speakers] who wrote each message, in
+ *   chat order; drives the "ends after N replies" durations
  */
-export function replay(records) {
+export function replay(records, speakers = []) {
     const bodies = new Map();
-    for (const { index, ops } of records) {
-        for (const op of ops || []) applyOp(bodies, op, index);
+    const opsAt = new Map();
+    for (const r of records) opsAt.set(r.index, [...(opsAt.get(r.index) || []), ...(r.ops || [])]);
+    const indexes = [...new Set([...records.map(r => r.index), ...speakers.map(s => s.index)])].sort((a, b) => a - b);
+    const speakerAt = new Map(speakers.map(s => [s.index, s.who]));
+    for (const index of indexes) {
+        // The message counts first: what is recorded on it happened after it was written.
+        if (speakerAt.has(index)) tick(bodies, speakerAt.get(index));
+        for (const op of opsAt.get(index) || []) applyOp(bodies, op, index);
     }
     return bodies;
+}
+
+/** Replies left before a condition ends, or null without a reply duration. */
+export function repliesLeft(c) {
+    return c.endReplies > 0 ? Math.max(0, c.endReplies - (c.endCount || 0)) : null;
 }
 
 /** Ids of parts that are missing, directly or because an ancestor is. */

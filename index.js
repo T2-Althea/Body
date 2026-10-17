@@ -3,7 +3,7 @@
 // matter which folder it is installed into.
 
 import { openFeatureEditor } from './src/editor.js';
-import { customFeatureFile, expandTemplate, mergeFeatureFiles, withFeatures } from './src/model.js';
+import { DEFAULT_NATURAL_STATES, customFeatureFile, expandTemplate, mergeFeatureFiles, withFeatures } from './src/model.js';
 import { buildNote, estimateTokens } from './src/note.js';
 import { applyLayout, initPanel, render } from './src/panel.js';
 import { initRunner, onNewMessage } from './src/runner.js';
@@ -28,6 +28,7 @@ const defaultSettings = Object.freeze({
     notePreviewOpen: false,
     customFeatures: { features: [], presets: [] }, // made in the races & features editor
     realism: 'grounded',
+    naturalStates: DEFAULT_NATURAL_STATES, // offered under Body → Natural; "Name (female|male|any): stage, stage"
     profiles: {},           // body sex per character/persona: { 'c:<avatar>' | 'u:<persona>': { sex } }
     marksInNote: true,      // tattoos/paint in the AI's note (one short line, cut first)    // cinematic | grounded | simulation (time skips; untreated flag in the note)
     // Automatic detection.
@@ -168,6 +169,11 @@ function renderSettings() {
                         <option value="simulation" ${sel('simulation', s.realism)}>Simulation</option>
                     </select>
                 </div>
+                <div class="bh-setting-col" title="Offered under Body → Natural in the condition form, filtered by the body's sex. One per line: Name (female, male or any): stages separated by commas.">
+                    <span>Natural body states</span>
+                    <textarea id="body_hud_natural" class="text_pole" rows="5">${s.naturalStates.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea>
+                    <small class="body-hud-muted">One per line, e.g. <code>Pregnancy (female): First trimester, Second trimester</code>. Leave empty to restore the defaults.</small>
+                </div>
                 <hr>
                 <b>Note sent to the AI</b>
                 <label class="checkbox_label">
@@ -264,6 +270,10 @@ function renderSettings() {
     bind('#body_hud_mannequin', 'showMannequin', el => el.checked);
     bind('#body_hud_realism', 'realism', el => el.value);
     bind('#body_hud_marks', 'marksInNote', el => el.checked);
+    bind('#body_hud_natural', 'naturalStates', el => {
+        if (!el.value.trim()) el.value = DEFAULT_NATURAL_STATES;
+        return el.value;
+    });
     $('#body_hud_edit_features').on('click', () => editFeatures());
     bind('#body_hud_inject', 'inject', el => el.checked);
     bind('#body_hud_position', 'position', el => Number(el.value));

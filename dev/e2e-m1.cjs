@@ -37,7 +37,7 @@ const { check, finish } = makeChecker();
     // Add an injury to Seraphina.
     await page.locator('.bh-member', { hasText: 'Seraphina' }).click();
     await page.click('[data-act="add"]');
-    await page.selectOption('#bh_f_kind', 'injury');
+    await page.click('.bh-cat[data-cat="body"]');
     await page.selectOption('#bh_f_part', 'left_thigh');
     await page.fill('#bh_f_type', 'Arrow wound');
     await page.selectOption('#bh_f_sev', 'moderate');
@@ -58,20 +58,21 @@ const { check, finish } = makeChecker();
 
     // Whole-body state, mind, missing part, temperature.
     await page.click('[data-act="add"]');
-    await page.selectOption('#bh_f_kind', 'state');
-    check('state form offers an optional area instead of a required part', (await page.locator('.bh-f-part-label').innerText()) === 'Area (optional)');
+    await page.click('.bh-cat[data-cat="body"]');
+    check('body form offers "Where" with Whole body as the default', (await page.locator('.bh-f-part-label').innerText()) === 'Where' && (await page.locator('#bh_f_part option[value=""]').innerText()) === 'Whole body');
     await page.fill('#bh_f_type', 'Wet');
     await page.selectOption('#bh_f_sev', 'minor');
     await page.click('[data-act="save"]');
 
     await page.click('[data-act="add"]');
-    await page.selectOption('#bh_f_kind', 'missing');
+    await page.click('.bh-cat[data-cat="body"]');
+    await page.click('.bh-sub[data-sub="missing"]');
     await page.selectOption('#bh_f_part', 'right_hand');
     await page.fill('#bh_f_effect', 'One-handed only');
     await page.click('[data-act="save"]');
 
     await page.click('[data-act="add"]');
-    await page.selectOption('#bh_f_kind', 'mind_current');
+    await page.click('.bh-cat[data-cat="mind"]');
     await page.fill('#bh_f_type', 'Panicked');
     await page.click('[data-act="save"]');
 
@@ -97,7 +98,7 @@ const { check, finish } = makeChecker();
     // A wound added later, on a later message, disappears when that message is deleted.
     await sendMessage(page, reqLog, 'Ouch.');
     await page.click('[data-act="add"]');
-    await page.selectOption('#bh_f_kind', 'injury');
+    await page.click('.bh-cat[data-cat="body"]');
     await page.selectOption('#bh_f_part', 'nose');
     await page.fill('#bh_f_type', 'Bruise');
     await page.click('[data-act="save"]');

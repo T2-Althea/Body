@@ -2,7 +2,7 @@
 // message and proposes body changes, and turns its JSON reply into ops.
 // Pure: no SillyTavern access, so prompt building and parsing are unit-tested.
 
-import { BLEEDING, BODY_PART, BODY_STATES, KINDS, MIND_PART, SEVERITIES, STATUSES, newId, npcKey } from './model.js';
+import { BLEEDING, BODY_PART, BODY_STATES, INTENSITY_LABELS, KINDS, MIND_PART, PAIN_LEVELS, SEVERITIES, STATUSES, newId, npcKey } from './model.js';
 import { formatDuration } from './timeskip.js';
 
 export const DETECT_TAG = '[BODY_HUD_TASK:detect]';
@@ -71,7 +71,7 @@ export function shortIds(members, bodies) {
 
 function describeCondition(c, partName) {
     const where = c.part && c.part !== BODY_PART ? partName(c.part) + ': ' : '';
-    const bits = [c.kind, c.severity, c.status, c.bleeding && c.bleeding !== 'none' ? `bleeding ${c.bleeding}` : null].filter(Boolean);
+    const bits = [c.kind, c.severity, c.stage, c.status, c.bleeding && c.bleeding !== 'none' ? `bleeding ${c.bleeding}` : null, c.pain && c.pain !== 'none' ? `pain ${c.pain}` : null].filter(Boolean);
     return `${where}${c.type || 'missing'} (${bits.join(', ')})`;
 }
 
@@ -104,13 +104,13 @@ Rules:
 
 Reply with JSON only:
 {"changes": [
- {"action": "add", "character": "<name>", "kind": "injury|missing|state|mind_lasting|mind_current", "part": "<part id>", "type": "<what, e.g. Arrow wound>", "severity": "minor|moderate|severe|critical", "bleeding": "none|light|moderate|heavy", "status": "fresh|treated|healing|scarred|permanent", "details": "", "effect": "", "cause": "", "hidden": false},
+ {"action": "add", "character": "<name>", "kind": "injury|missing|state|effect|natural|mind_lasting|mind_current|mark", "part": "<part id>", "type": "<what, e.g. Arrow wound>", "severity": "minor|moderate|severe|critical", "bleeding": "none|light|moderate|heavy", "status": "fresh|treated|healing|scarred|permanent", "pain": "none|mild|moderate|severe|agonizing", "details": "", "effect": "", "cause": "", "hidden": false},
  {"action": "update", "character": "<name>", "id": "<c1…>", "changes": {"status": "treated", "bleeding": "none"}},
  {"action": "remove", "character": "<name>", "id": "<c1…>"},
  {"action": "temperature", "character": "<name>", "celsius": 38.5},
  {"action": "time_passes", "days": 3}
 ]}
-kind "mark" = tattoos, body paint, brands (status "permanent" or "temporary"); kind "injury" = anything else on a body part; "state" = whole-body states (${BODY_STATES.join(', ').toLowerCase()}…), part optional; mind kinds need no part.
+kind "mark" = tattoos, body paint, brands (status "permanent" or "temporary"); kind "injury" = anything else on a body part; "state" = whole-body states (${BODY_STATES.join(', ').toLowerCase()}…), part optional; "effect" = poison, drugs, medicine and its side effects, magic enhancements or curses (severity = intensity), no part; "natural" = period, pregnancy, heat and similar natural body states, no part; mind kinds need no part. "pain" is optional.
 
 Part ids. * = needs a left_ or right_ prefix; a * on a region (before the colon) applies to every part on that line, e.g. leg* → left_thigh, right_knee:
 ${partGuide(index)}`;
@@ -180,6 +180,8 @@ export function parseDetection(json, { members, index, ids, allowNpcs = true }) 
                 needsSide = r.base || null;
             } else if (kind === 'state') {
                 part = resolvePart(ch.part, index).id || BODY_PART;
+            } else if (kind === 'effect' || kind === 'natural') {
+                part = BODY_PART;
             } else {
                 part = MIND_PART;
             }
@@ -190,7 +192,7 @@ export function parseDetection(json, { members, index, ids, allowNpcs = true }) 
                 kind,
                 part,
                 type,
-                severity: kind === 'missing' || kind === 'mark' ? null : pick(ch.severity, SEVERITIES, 'moderate'),
+                severity: kind === 'missing' || kind === 'mark' || kind === 'natural' ? null : pick(ch.severity, SEVERITIES, 'moderate'),
                 bleeding: kind === 'injury' ? pick(ch.bleeding, BLEEDING, 'none') : null,
                 status: kind === 'injury' || kind === 'missing' ? pick(ch.status, STATUSES, kind === 'missing' ? 'permanent' : 'fresh')
                     : kind === 'mark' ? pick(ch.status, ['permanent', 'temporary'], 'permanent') : null,
@@ -199,6 +201,8 @@ export function parseDetection(json, { members, index, ids, allowNpcs = true }) 
                 cause: str(ch.cause),
                 hidden: ch.hidden === true,
             };
+            const pain = pick(ch.pain, PAIN_LEVELS, null);
+            if (pain && kind !== 'mark') cond.pain = pain;
             const where = needsSide ? `${needsSide.replace(/_/g, ' ')} (side?)` : part === BODY_PART ? 'whole body' : partName(part);
             out.push({
                 pid: newId(), who: m.key, needsSide, ...(npc ? { npc } : {}),
@@ -217,6 +221,7 @@ export function parseDetection(json, { members, index, ids, allowNpcs = true }) 
             if (c.severity) changes.severity = pick(c.severity, SEVERITIES, undefined);
             if (c.bleeding) changes.bleeding = pick(c.bleeding, BLEEDING, undefined);
             if (c.status) changes.status = pick(c.status, STATUSES, undefined);
+            if (c.pain) changes.pain = pick(c.pain, PAIN_LEVELS, undefined);
             for (const k of ['details', 'effect', 'cause', 'type']) if (c[k] != null) changes[k] = str(c[k]);
             if (typeof c.hidden === 'boolean') changes.hidden = c.hidden;
             Object.keys(changes).forEach(k => changes[k] === undefined && delete changes[k]);
@@ -242,18 +247,37 @@ export function withSide(proposal, side) {
     return p;
 }
 
-/** Prompt for the ✨ buttons: suggest effect/details/cause for one condition. */
-export function buildFillPrompt({ characterName, cond, partLabel, recentChat }) {
+const FILL_HELP = {
+    type: 'type: what the condition is, a short name (e.g. "Arrow wound", "Poisoned", "Panicked"). Invent one that fits the category, the place on the body and the recent story; prefer something the story suggests, otherwise pick a plausible one at random.',
+    effect: 'effect: what the character can\'t do or does differently, as short capability limits (e.g. "Can\'t run; limps"). Max ~12 words.',
+    details: 'details: one concrete physical detail (e.g. "Arrowhead still lodged"). Max ~10 words.',
+    cause: 'cause: what caused it, from the story if known (e.g. "Bandit\'s arrow during the ambush"). Max ~10 words.',
+    pain: `pain: how much it hurts right now, the logical level for this condition: one of ${PAIN_LEVELS.join(', ')}.`,
+};
+const CATEGORY_HELP = {
+    body: 'something physical on the body (a wound, a whole-body state like wet or exhausted)',
+    missing: 'a missing body part',
+    natural: 'a natural body state (period, pregnancy, heat…)',
+    mind: 'a mental condition',
+    effect: 'a status effect (poison, drugs or medicine and their side effects, a magic enhancement or curse)',
+    mark: 'a mark on the skin (tattoo, body paint, brand…)',
+};
+
+/**
+ * Prompt for the ✨ buttons: suggest some fields of one condition.
+ * @param {{ characterName, cond, partLabel, recentChat, fields?: string[], category?: string }} input
+ */
+export function buildFillPrompt({ characterName, cond, partLabel, recentChat, fields = ['effect', 'details', 'cause'], category = '' }) {
+    const asked = fields.filter(f => FILL_HELP[f]);
     const system = `${FILL_TAG}
 You help fill in a body-condition record for a roleplay. Using the condition and the recent story, suggest short values.
-- effect: what the character can't do or does differently, as short capability limits (e.g. "Can't run; limps"). Max ~12 words.
-- details: one concrete physical detail (e.g. "Arrowhead still lodged"). Max ~10 words.
-- cause: what caused it, from the story if known (e.g. "Bandit's arrow during the ambush"). Max ~10 words.
-Reply with JSON only: {"effect": "", "details": "", "cause": ""}`;
+${asked.map(f => `- ${FILL_HELP[f]}`).join('\n')}
+Reply with JSON only: {${asked.map(f => `"${f}": ""`).join(', ')}}`;
     const known = Object.entries({
-        kind: KINDS[cond.kind] || cond.kind, part: partLabel, what: cond.type, severity: cond.severity,
-        bleeding: cond.bleeding, status: cond.status, details: cond.details, effect: cond.effect, cause: cond.cause,
-    }).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join('\n');
+        category: CATEGORY_HELP[category] || '', kind: category ? '' : (KINDS[cond.kind] || cond.kind), part: partLabel, what: cond.type,
+        stage: cond.stage, [cond.kind === 'effect' ? 'intensity' : 'severity']: cond.kind === 'effect' ? INTENSITY_LABELS[cond.severity] : cond.severity,
+        bleeding: cond.bleeding !== 'none' ? cond.bleeding : '', status: cond.status, pain: cond.pain, details: cond.details, effect: cond.effect, cause: cond.cause,
+    }).filter(([k, v]) => v && !asked.includes(k === 'what' ? 'type' : k)).map(([k, v]) => `${k}: ${v}`).join('\n');
     const user = `CHARACTER: ${characterName}
 CONDITION:
 ${known}

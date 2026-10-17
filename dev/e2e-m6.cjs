@@ -24,7 +24,7 @@ const { check, finish } = makeChecker();
     };
     const addCond = async (fields) => {
         await page.click('.bh-actions [data-act="add"]');
-        await page.selectOption('#bh_f_kind', fields.kind || 'injury');
+        await page.click(`.bh-cat[data-cat="${String(fields.kind || '').startsWith('mind') ? 'mind' : 'body'}"]`);
         if (fields.part) await page.selectOption('#bh_f_part', fields.part);
         if (fields.type) await page.fill('#bh_f_type', fields.type);
         if (fields.sev) await page.selectOption('#bh_f_sev', fields.sev);

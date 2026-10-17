@@ -2,14 +2,14 @@
 // chat. Hides itself while SillyTavern's own drawer on the same side is open.
 
 import {
-    BLEEDING, BODY_PART, BODY_STATES, KINDS, MARK_DURATIONS, MIND_PART, SEVERITIES, SEXES, STATUSES,
-    isAffected, missingParts, newId, npcKey, partShown, severityRank,
+    BLEEDING, BODY_PART, BODY_STATES, CATEGORIES, INTENSITY_LABELS, MARK_DURATIONS, MIND_PART, PAIN_LEVELS, SEVERITIES, SEXES, STATUSES,
+    bodySubOf, categoryOf, isAffected, missingParts, newId, npcKey, parseNaturalStates, partShown, repliesLeft, severityRank,
 } from './model.js';
 import { withSide } from './detect.js';
 import { describeFailure } from './llm.js';
 import { renderMannequin } from './mannequin.js';
 import { isBusy, scanLatest, suggestFields } from './runner.js';
-import { UNITS, daysToNextStage, formatDuration, planTimeSkip } from './timeskip.js';
+import { UNITS, daysLeft, daysToNextStage, formatDuration, planTimeSkip } from './timeskip.js';
 import {
     buildBodies, collectPending, getAwayNpcs, getSceneMembers, hasOpenChat, memberFeatures, memberSex, profileKey, recentDetected, resolvePending,
     undoOp, undoSkip, writeManualOps,
@@ -21,6 +21,20 @@ const INJURY_TYPES = [
     'Cut', 'Stab wound', 'Arrow wound', 'Gunshot wound', 'Bite', 'Claw marks', 'Bruise',
     'Burn', 'Frostbite', 'Fracture', 'Dislocation', 'Sprain', 'Concussion', 'Puncture',
 ];
+
+const MIND_TYPES = [
+    'Panicked', 'Afraid', 'Anxious', 'Grieving', 'Furious', 'Ashamed', 'Dazed', 'Confused',
+    'In shock', 'Traumatized', 'Nightmares', 'Phobia', 'Amnesia',
+];
+
+const EFFECT_TYPES = [
+    'Poisoned', 'Drugged', 'Sedated', 'Painkillers', 'Stimulant', 'Side effects', 'Allergic reaction',
+    'Hangover', 'Healing potion', 'Blessed', 'Cursed', 'Hexed', 'Charmed', 'Weakened',
+    'Enhanced strength', 'Enhanced speed', 'Night vision',
+];
+
+// "Ends" choices in the progress block.
+const END_UNITS = { hours: 1 / 24, days: 1, weeks: 7 };
 
 // Drawers that occupy each side of the screen.
 const SIDE_DRAWERS = {
@@ -94,7 +108,7 @@ export function initPanel(options) {
             if (this.checked) have.add(this.getAttribute('data-feature')); else have.delete(this.getAttribute('data-feature'));
             saveFeatures([...have]);
         })
-        .on('change', '#bh_f_kind', () => updateFormFields())
+        .on('change', '#bh_f_part, #bh_f_ends, #bh_f_type', () => updateFormFields())
         .on('change', '#bh_s_amount, #bh_s_unit, #bh_s_scope', () => {
             if (form?.mode !== 'skip') return;
             form.amount = $('#bh_s_amount').val();
@@ -198,6 +212,8 @@ export function render() {
 
     const conds = [...body.conditions.values()];
     const states = conds.filter(c => c.kind === 'state');
+    const natural = conds.filter(c => c.kind === 'natural');
+    const effects = conds.filter(c => c.kind === 'effect');
     const mind = conds.filter(c => c.kind === 'mind_lasting' || c.kind === 'mind_current');
     const injuries = conds.filter(c => c.kind === 'injury' || !c.kind);
     const missing = conds.filter(c => c.kind === 'missing');
@@ -213,7 +229,9 @@ export function render() {
     }
     html += '</div></div>';
 
+    if (effects.length) html += section('Status effects', effects.sort((a, b) => severityRank(b.severity) - severityRank(a.severity)).map(c => condRow(c, index)).join(''));
     if (mind.length) html += section('Mind', mind.map(c => condRow(c, index)).join(''));
+    if (natural.length) html += section('Natural', natural.map(c => condRow(c, index)).join(''));
 
     if (injuries.length) {
         const byRegion = new Map();
@@ -407,20 +425,35 @@ function healingHint(c) {
     return `~${formatDuration(Math.max(d, 1 / 24))} ${next}`;
 }
 
+// "ends in 2 replies from Seraphina", "~3 days left"
+function durationHint(c) {
+    const n = repliesLeft(c);
+    if (n !== null) {
+        const what = c.endThen === 'heal' ? 'next stage in' : 'ends in';
+        return `${what} ${n} repl${n === 1 ? 'y' : 'ies'}${selected?.startsWith('n:') ? '' : ` from ${selectedMember()?.name || 'them'}`}`;
+    }
+    const d = daysLeft(c);
+    return d === null ? null : `~${formatDuration(Math.max(d, 1 / 24))} left`;
+}
+
 function condRow(c, index, note = '') {
     const meta = [
-        c.kind === 'injury' || !c.kind ? cap(c.severity) : null,
+        c.kind === 'injury' || !c.kind || c.kind?.startsWith('mind') ? cap(c.severity) : null,
+        c.kind === 'effect' && c.severity ? INTENSITY_LABELS[c.severity] : null,
         c.kind === 'mark' ? (c.status === 'temporary' ? 'Temporary' : 'Permanent') : null,
         c.bleeding && c.bleeding !== 'none' ? `bleeding: ${c.bleeding}` : null,
+        c.pain && c.pain !== 'none' ? `pain: ${c.pain}` : null,
         c.status && c.kind !== 'mark' ? cap(c.status) : null,
         healingHint(c),
+        durationHint(c),
         c.kind === 'mind_current' ? 'current' : c.kind === 'mind_lasting' ? 'lasting' : null,
         c.since >= 0 ? `since #${c.since}` : 'before the chat',
         note || null,
     ].filter(Boolean).join(' · ');
     const title = c.kind === 'missing' ? partName(index, c.part)
-        : c.kind?.startsWith('mind') ? c.type
-            : `${partName(index, c.part)}: ${c.type}`;
+        : c.kind?.startsWith('mind') || c.kind === 'effect' ? c.type
+            : c.kind === 'natural' ? `${c.type}${c.stage ? ` (${c.stage.toLowerCase()})` : ''}`
+                : `${partName(index, c.part)}: ${c.type}`;
     return `
         <div class="bh-cond bh-sev-${esc(c.severity || (c.kind === 'missing' ? 'missing' : ''))}">
             <div class="bh-cond-main">
@@ -510,69 +543,163 @@ function renderForm(body, index) {
 
     form.key = form.key || newId();
     const c = form.mode === 'edit' ? body.conditions.get(form.id) : form.mode === 'review' ? form.cond : null;
-    const base = c || { kind: 'injury', part: form.part || '', type: '', severity: 'moderate', bleeding: 'none', status: 'fresh', effect: '', details: '', cause: '', hidden: false };
+    const base = c || { kind: 'injury', part: form.part || '', type: '', severity: 'moderate', bleeding: 'none', status: 'fresh', pain: '', effect: '', details: '', cause: '', hidden: false };
     const v = { ...base, ...(form.draft || {}) };
+    if (!form.cat) {
+        form.cat = categoryOf(base);
+        form.sub = form.cat === 'body' ? bodySubOf(base) : form.cat === 'mind' ? (base.kind === 'mind_lasting' ? 'lasting' : 'current') : null;
+        form.origKind = c?.kind || null;
+    }
     const fill = field => `<span class="fa-solid fa-wand-magic-sparkles bh-fill" data-act="fill" data-field="${field}" title="Suggest this from the condition and the recent story"></span>`;
     const hideSensitive = opts.getSettings().hideSensitive;
     const partOpts = index.order
         .filter(id => partShown(index.parts.get(id), { sex: currentSex(), hideSensitive, features: currentFeatures() }) || id === v.part)
         .map(id => {
             const p = index.parts.get(id);
-            return `<option value="${esc(id)}" ${id === v.part ? 'selected' : ''}>${'  '.repeat(p.depth)}${esc(p.name)}</option>`;
+            return `<option value="${esc(id)}" ${id === v.part ? 'selected' : ''}>${'  '.repeat(p.depth)}${esc(p.name)}</option>`;
         }).join('');
+
+    // Duration: stored as endReplies / endDays; the form shows a choice plus an amount.
+    const ends = v.ends ?? (v.endReplies > 0 ? 'replies' : v.endDays > 0 ? 'time' : '');
+    const unit = v.endUnit ?? (v.endDays > 0 && v.endDays < 1 ? 'hours' : v.endDays >= 7 && v.endDays % 7 === 0 ? 'weeks' : 'days');
+    const amount = v.endN ?? (v.endReplies > 0 ? v.endReplies : v.endDays > 0 ? Math.round(v.endDays / END_UNITS[unit] * 100) / 100 : '');
+    const who = getSceneMembers().find(m => m.key === (form.mode === 'review' ? form.who : selected));
+    const repliesFrom = who?.npc ? 'AI replies' : `replies from ${who?.name || 'them'}`;
+    const catButtons = Object.entries(CATEGORIES).map(([k, label]) => `<div class="menu_button bh-cat" data-act="cat" data-cat="${k}">${esc(label)}</div>`).join('');
+    const subButtons = (cat, subs) => `<div class="bh-subs" data-for="${cat}">${Object.entries(subs).map(([k, label]) => `<div class="menu_button bh-small bh-sub" data-act="sub" data-sub="${k}">${esc(label)}</div>`).join('')}</div>`;
 
     return `<div class="bh-form" data-key="${form.key}">
         <div class="bh-section-title">${form.mode === 'review' ? 'Edit proposed change' : c ? 'Edit condition' : 'New condition'}</div>
-        <label>Kind <select id="bh_f_kind" class="text_pole">${options(Object.keys(KINDS), v.kind || 'injury', Object.values(KINDS))}</select></label>
+        <div class="bh-cats">${catButtons}</div>
+        ${subButtons('body', { part: 'On the body', missing: 'Missing part', natural: 'Natural' })}
+        ${subButtons('mind', { current: 'Current (passes)', lasting: 'Lasting' })}
         <label class="bh-f-part"><span class="bh-f-part-label">Part</span> <select id="bh_f_part" class="text_pole"><option value="">— choose —</option>${partOpts}</select></label>
-        <label class="bh-f-type">What <input id="bh_f_type" class="text_pole" list="bh_types" value="${esc(v.type)}" placeholder="e.g. Arrow wound"></label>
+        <label class="bh-f-type">What ${fill('type')}<input id="bh_f_type" class="text_pole" list="bh_types" value="${esc(v.type)}" placeholder="e.g. Arrow wound"></label>
         <datalist id="bh_types"></datalist>
-        <div class="bh-row">
-            <label class="bh-f-sev">Severity <select id="bh_f_sev" class="text_pole">${options(SEVERITIES, v.severity)}</select></label>
-            <label class="bh-f-bleed">Bleeding <select id="bh_f_bleed" class="text_pole">${options(BLEEDING, v.bleeding || 'none')}</select></label>
-            <label class="bh-f-status">Status <select id="bh_f_status" class="text_pole">${options(STATUSES, v.status || 'fresh')}</select></label>
-        </div>
+        <label class="bh-f-stage">Stage (optional) <input id="bh_f_stage" class="text_pole" list="bh_stages" value="${esc(v.stage || '')}" placeholder="e.g. Second trimester"></label>
+        <datalist id="bh_stages"></datalist>
+        <fieldset class="bh-progress">
+            <legend>Progress</legend>
+            <div class="bh-row">
+                <label class="bh-f-sev"><span class="bh-f-sev-label">Severity</span> <select id="bh_f_sev" class="text_pole">${options(SEVERITIES, v.severity || 'moderate')}</select></label>
+                <label class="bh-f-bleed">Bleeding <select id="bh_f_bleed" class="text_pole">${options(BLEEDING, v.bleeding || 'none')}</select></label>
+                <label class="bh-f-status">Status <select id="bh_f_status" class="text_pole">${options(STATUSES, v.status || 'fresh')}</select></label>
+            </div>
+            <label class="bh-f-pain">Pain ${fill('pain')}<select id="bh_f_pain" class="text_pole"><option value="">— not set —</option>${options(PAIN_LEVELS, v.pain || '')}</select></label>
+            <label class="bh-f-ends">Ends <select id="bh_f_ends" class="text_pole">
+                <option value="" ${ends === '' ? 'selected' : ''}>Until removed</option>
+                <option value="replies" ${ends === 'replies' ? 'selected' : ''}>After a number of replies (experimental)</option>
+                <option value="time" ${ends === 'time' ? 'selected' : ''}>After a time (counted on time skips)</option>
+            </select></label>
+            <div class="bh-row bh-f-endrow">
+                <label class="bh-f-endn">After <input id="bh_f_endn" class="text_pole" type="number" min="1" step="any" value="${esc(amount)}"></label>
+                <label class="bh-f-endunit">Unit <select id="bh_f_endunit" class="text_pole">${options(Object.keys(END_UNITS), unit)}</select></label>
+                <label class="bh-f-endwho"><span>&nbsp;</span><span class="bh-f-endwho-text">${esc(repliesFrom)}</span></label>
+                <label class="bh-f-endthen">Then <select id="bh_f_endthen" class="text_pole">${options(['clear', 'heal'], v.endThen || 'heal', ['Clears', 'Heals a stage'])}</select></label>
+            </div>
+        </fieldset>
+        <label class="bh-f-lasts">Lasts <select id="bh_f_lasts" class="text_pole">${options(Object.keys(MARK_DURATIONS), v.kind === 'mark' ? (v.lasts || v.status || 'permanent') : 'permanent', Object.values(MARK_DURATIONS))}</select></label>
         <label>Effect (what they can't do) ${fill('effect')}<input id="bh_f_effect" class="text_pole" value="${esc(v.effect)}" placeholder="e.g. Can't run; limps"></label>
         <label>Details ${fill('details')}<input id="bh_f_details" class="text_pole" value="${esc(v.details)}" placeholder="e.g. Arrowhead still lodged"></label>
         <label>Cause ${fill('cause')}<input id="bh_f_cause" class="text_pole" value="${esc(v.cause)}" placeholder="e.g. Bandit's arrow"></label>
-        <label class="bh-f-lasts">Lasts <select id="bh_f_lasts" class="text_pole">${options(Object.keys(MARK_DURATIONS), v.kind === 'mark' ? (v.status || 'permanent') : 'permanent', Object.values(MARK_DURATIONS))}</select></label>
         <label class="checkbox_label"><input id="bh_f_hidden" type="checkbox" ${v.hidden ? 'checked' : ''}> <span>Hidden from other characters</span></label>
         <div class="bh-actions">
             <div class="menu_button" data-act="save">${form.mode === 'review' ? 'Apply' : 'Save'}</div>
             <div class="menu_button" data-act="cancel">Cancel</div>
-            <div class="menu_button" data-act="fill" data-field="" title="Suggest Effect, Details and Cause where they're empty"><i class="fa-solid fa-wand-magic-sparkles"></i> Fill empty</div>
+            <div class="menu_button" data-act="fill" data-field="" title="Suggest every empty field (What included) from the recent story"><i class="fa-solid fa-wand-magic-sparkles"></i> Fill empty</div>
         </div>
     </div>`;
 }
 
-// Shows only the fields that make sense for the chosen kind.
+/** Natural states offered for the selected body (by sex). */
+function naturalStates() {
+    const sex = currentSex();
+    return parseNaturalStates(opts.getSettings().naturalStates).filter(n => !n.sex || sex === 'unspecified' || n.sex === sex);
+}
+
+const isBodyStateName = type => BODY_STATES.some(t => t.toLowerCase() === String(type || '').trim().toLowerCase());
+
+/** The stored kind for what the form currently shows. */
+function formKind() {
+    switch (form?.cat) {
+        case 'mind': return form.sub === 'lasting' ? 'mind_lasting' : 'mind_current';
+        case 'effect': return 'effect';
+        case 'mark': return 'mark';
+    }
+    if (form?.sub === 'missing') return 'missing';
+    if (form?.sub === 'natural') return 'natural';
+    const part = $('#bh_f_part').val();
+    if (!part || part === BODY_PART) return 'state';
+    // A body state (wet, cold…) limited to an area stays a state; anything else on a part is an injury.
+    return form?.origKind === 'state' || isBodyStateName($('#bh_f_type').val()) ? 'state' : 'injury';
+}
+
+// Shows only the fields that make sense for the chosen category.
 function updateFormFields() {
-    const kind = $('#bh_f_kind').val();
-    const isInjury = kind === 'injury';
-    const isState = kind === 'state';
+    if (!form?.cat) return;
+    const { cat, sub } = form;
+    const kind = formKind();
+    const onBody = cat === 'body' && sub === 'part';
+    const isMissing = kind === 'missing';
+    const isNatural = kind === 'natural';
     const isMark = kind === 'mark';
-    $('.bh-f-part').toggle(isInjury || kind === 'missing' || isState || isMark);
+    const onPart = kind === 'injury' || (kind === 'state' && $('#bh_f_part').val());
+    $('.bh-cat').each(function () { $(this).toggleClass('bh-active', this.getAttribute('data-cat') === cat); });
+    $('.bh-subs').each(function () { $(this).toggle(this.getAttribute('data-for') === cat); });
+    $('.bh-sub').each(function () { $(this).toggleClass('bh-active', this.getAttribute('data-sub') === sub); });
+
+    $('.bh-f-part').toggle(onBody || isMissing || isMark);
+    $('.bh-f-part-label').text(onBody ? 'Where' : 'Part');
+    $('#bh_f_part option[value=""]').text(onBody ? 'Whole body' : '— choose —');
+    $('.bh-f-type').toggle(!isMissing);
+    $('.bh-f-stage').toggle(isNatural);
+    $('.bh-progress').toggle(!isMark);
     $('.bh-f-lasts').toggle(isMark);
-    $('.bh-f-part-label').text(isState ? 'Area (optional)' : 'Part');
-    $('#bh_f_part option[value=""]').text(isState ? 'Whole body' : '— choose —');
-    $('.bh-f-type').toggle(kind !== 'missing');
-    $('.bh-f-bleed').toggle(isInjury);
-    $('.bh-f-sev').toggle(kind !== 'missing' && !isMark);
-    $('.bh-f-status').toggle(isInjury || kind === 'missing');
-    if (kind === 'missing' && form?.mode === 'add') $('#bh_f_status').val('permanent');
-    const list = kind === 'state' ? BODY_STATES : isInjury ? INJURY_TYPES : isMark ? MARK_TYPES : [];
+    $('.bh-f-sev').toggle(onBody || cat === 'mind' || cat === 'effect');
+    $('.bh-f-sev-label').text(cat === 'effect' ? 'Intensity' : 'Severity');
+    $('#bh_f_sev option').each(function () { this.textContent = cat === 'effect' ? INTENSITY_LABELS[this.value] : cap(this.value); });
+    $('.bh-f-bleed').toggle(kind === 'injury');
+    $('.bh-f-status').toggle(kind === 'injury' || isMissing);
+    $('.bh-f-pain').toggle(cat !== 'mind' && !isMark);
+    if (isMissing && form.mode === 'add' && !form.draft) $('#bh_f_status').val('permanent');
+
+    // Wounds heal through time skips on their own, so "after a time" is for the rest.
+    $('.bh-f-ends').toggle(!isMissing);
+    $('#bh_f_ends option[value="time"]').toggle(kind !== 'injury');
+    if (kind === 'injury' && $('#bh_f_ends').val() === 'time') $('#bh_f_ends').val('');
+    const ends = isMissing ? '' : $('#bh_f_ends').val();
+    $('.bh-f-endrow').toggle(!!ends);
+    $('.bh-f-endunit').toggle(ends === 'time');
+    $('.bh-f-endwho').toggle(ends === 'replies');
+    $('.bh-f-endthen').toggle(ends === 'replies' && kind === 'injury');
+
+    const naturals = naturalStates();
+    const list = onBody ? (onPart ? [...INJURY_TYPES, ...BODY_STATES] : BODY_STATES)
+        : isNatural ? naturals.map(n => n.name)
+            : cat === 'mind' ? MIND_TYPES : cat === 'effect' ? EFFECT_TYPES : isMark ? MARK_TYPES : [];
     $('#bh_types').html(list.map(t => `<option value="${esc(t)}">`).join(''));
+    $('#bh_f_type').attr('placeholder', { body: isNatural ? 'e.g. Period' : onPart ? 'e.g. Arrow wound' : 'e.g. Wet, Exhausted', mind: 'e.g. Panicked', effect: 'e.g. Poisoned', mark: 'e.g. Dragon tattoo' }[cat]);
+    const type = String($('#bh_f_type').val() || '').trim().toLowerCase();
+    const stages = naturals.find(n => n.name.toLowerCase() === type)?.stages || [];
+    $('#bh_stages').html(stages.map(t => `<option value="${esc(t)}">`).join(''));
 }
 
 // Current form values without validation (for drafts and the fill buttons).
 function rawForm() {
     return {
-        kind: $('#bh_f_kind').val(),
+        kind: formKind(),
         part: $('#bh_f_part').val(),
         type: String($('#bh_f_type').val() ?? ''),
+        stage: String($('#bh_f_stage').val() ?? ''),
         severity: $('#bh_f_sev').val(),
         bleeding: $('#bh_f_bleed').val(),
         status: $('#bh_f_status').val(),
+        pain: $('#bh_f_pain').val() || '',
+        ends: $('#bh_f_ends').val() || '',
+        endN: String($('#bh_f_endn').val() ?? ''),
+        endUnit: $('#bh_f_endunit').val(),
+        endThen: $('#bh_f_endthen').val(),
+        lasts: $('#bh_f_lasts').val(),
         effect: String($('#bh_f_effect').val() ?? ''),
         details: String($('#bh_f_details').val() ?? ''),
         cause: String($('#bh_f_cause').val() ?? ''),
@@ -580,25 +707,49 @@ function rawForm() {
     };
 }
 
+/** The part a condition of this kind is stored on. */
+function storedPart(kind, part) {
+    if (kind === 'state') return part || BODY_PART;
+    if (kind === 'mind_lasting' || kind === 'mind_current') return MIND_PART;
+    if (kind === 'effect' || kind === 'natural') return BODY_PART;
+    return part;
+}
+
 function readForm() {
-    const kind = $('#bh_f_kind').val();
-    let part = $('#bh_f_part').val();
-    if (kind === 'state') part = part || BODY_PART;
-    if (kind === 'mind_lasting' || kind === 'mind_current') part = MIND_PART;
+    const r = rawForm();
+    const kind = r.kind;
+    const part = storedPart(kind, r.part);
+    // Every field is written, so switching category doesn't leave stale values behind.
+    let endReplies = null, endThen = null, endDays = null;
+    const n = Number(r.endN);
+    if (kind !== 'missing' && kind !== 'mark' && r.ends) {
+        if (!(n > 0)) return { error: r.ends === 'replies' ? 'Enter after how many replies it ends.' : 'Enter after how long it ends.' };
+        if (r.ends === 'replies') {
+            endReplies = Math.max(1, Math.round(n));
+            endThen = kind === 'injury' ? r.endThen : 'clear';
+        } else if (kind !== 'injury') {
+            endDays = n * (END_UNITS[r.endUnit] || 1);
+        }
+    }
     const cond = {
         kind,
         part,
-        type: kind === 'missing' ? 'Missing' : String($('#bh_f_type').val()).trim(),
-        severity: kind === 'missing' || kind === 'mark' ? null : $('#bh_f_sev').val(),
-        bleeding: kind === 'injury' ? $('#bh_f_bleed').val() : null,
-        status: kind === 'injury' || kind === 'missing' ? $('#bh_f_status').val() : kind === 'mark' ? $('#bh_f_lasts').val() : null,
-        effect: String($('#bh_f_effect').val()).trim(),
-        details: String($('#bh_f_details').val()).trim(),
-        cause: String($('#bh_f_cause').val()).trim(),
-        hidden: $('#bh_f_hidden').is(':checked'),
+        type: kind === 'missing' ? 'Missing' : r.type.trim(),
+        stage: kind === 'natural' ? r.stage.trim() : null,
+        severity: kind === 'missing' || kind === 'mark' || kind === 'natural' ? null : r.severity,
+        bleeding: kind === 'injury' ? r.bleeding : null,
+        status: kind === 'injury' || kind === 'missing' ? r.status : kind === 'mark' ? r.lasts : null,
+        pain: kind === 'mark' || kind.startsWith('mind') ? null : (r.pain || null),
+        endReplies,
+        endThen,
+        endDays,
+        effect: r.effect.trim(),
+        details: r.details.trim(),
+        cause: r.cause.trim(),
+        hidden: r.hidden,
     };
-    if ((kind === 'injury' || kind === 'missing' || kind === 'mark') && !cond.part) return { error: 'Choose a body part.' };
-    if (kind !== 'missing' && !cond.type) return { error: 'Describe what it is (the "What" field).' };
+    if ((kind === 'missing' || kind === 'mark') && !cond.part) return { error: 'Choose a body part.' };
+    if (kind !== 'missing' && !cond.type) return { error: 'Describe what it is (the "What" field), or let ✨ suggest something.' };
     return { cond };
 }
 
@@ -704,6 +855,18 @@ async function onAction(e) {
         }
         case 'scan': scanLatest(); return;
         case 'fill': await fillFields($(this).attr('data-field')); return;
+        case 'cat': {
+            const cat = $(this).attr('data-cat');
+            if (form?.cat === cat) return;
+            form.cat = cat;
+            form.sub = cat === 'body' ? 'part' : cat === 'mind' ? 'current' : null;
+            updateFormFields();
+            return;
+        }
+        case 'sub':
+            form.sub = $(this).attr('data-sub');
+            updateFormFields();
+            return;
     }
     let ops = null;
     switch (act) {
@@ -727,6 +890,9 @@ async function onAction(e) {
                 await afterStore(resolvePending(i, rpid, opsFor(form0, { t: 'add', who, cond: { ...orig, ...cond } })));
                 return;
             }
+            const old = form.mode === 'edit' ? buildBodies().get(selected)?.conditions.get(form.id) : null;
+            // A new duration starts counting from now.
+            if (old && (old.endDays ?? null) !== cond.endDays && old.kind !== 'injury') cond.progress = 0;
             ops = form.mode === 'edit'
                 ? [{ t: 'edit', who: selected, id: form.id, changes: cond }]
                 : [{ t: 'add', who: selected, cond: { id: newId(), ...cond } }];
@@ -757,29 +923,47 @@ async function onAction(e) {
 async function fillFields(field) {
     const index = opts.getIndex();
     const raw = rawForm();
-    if (raw.kind !== 'missing' && !raw.type.trim()) {
-        toastr.info('Fill in "What" first, so there is something to describe.');
+    const kind = raw.kind;
+    const painShown = kind !== 'mark' && !kind.startsWith('mind');
+    if (field && field !== 'type' && kind !== 'missing' && !raw.type.trim()) {
+        toastr.info('Fill in "What" first (✨ next to it suggests something), so there is something to describe.');
         return;
     }
+    const targets = field ? [field] : [
+        ...(kind !== 'missing' && !raw.type.trim() ? ['type'] : []),
+        ...['effect', 'details', 'cause'].filter(f => !raw[f].trim()),
+        ...(painShown && !raw.pain ? ['pain'] : []),
+    ];
+    if (!targets.length) { toastr.info('Nothing empty to fill.'); return; }
     const who = form?.mode === 'review' ? form.who : selected;
     const member = getSceneMembers().find(m => m.key === who);
-    const part = raw.kind === 'state' ? (raw.part || BODY_PART) : raw.kind.startsWith('mind') ? MIND_PART : raw.part;
-    const targets = field ? [field] : ['effect', 'details', 'cause'].filter(f => !raw[f].trim());
-    if (!targets.length) { toastr.info('Nothing empty to fill.'); return; }
+    const part = storedPart(kind, raw.part);
+    const partLabel = kind.startsWith('mind') ? 'mind' : part === BODY_PART ? 'whole body' : part ? partName(index, part) : 'any body part (pick one)';
+    const category = form.cat === 'body' ? (form.sub === 'part' ? 'body' : form.sub) : form.cat;
     const myForm = form;
     $('.bh-fill, [data-act="fill"]').addClass('bh-working');
     try {
         const suggestion = await suggestFields({
             characterName: member?.name || 'Character',
-            cond: { ...raw, type: raw.kind === 'missing' ? 'Missing' : raw.type },
-            partLabel: part === BODY_PART ? 'whole body' : partName(index, part),
+            cond: { ...raw, type: kind === 'missing' ? 'Missing' : raw.type },
+            partLabel,
+            fields: targets,
+            category,
         });
         if (form !== myForm) return;
         let filled = 0;
         for (const f of targets) {
             const val = String(suggestion?.[f] ?? '').trim();
-            if (val) { $(`#bh_f_${f}`).val(val); filled++; }
+            if (!val) continue;
+            if (f === 'pain') {
+                if (!PAIN_LEVELS.includes(val.toLowerCase())) continue;
+                $('#bh_f_pain').val(val.toLowerCase());
+            } else {
+                $(`#bh_f_${f}`).val(val);
+            }
+            filled++;
         }
+        if (targets.includes('type')) updateFormFields();
         if (!filled) toastr.warning('The model\'s answer was cut off or empty. Try again, or raise "Max reply tokens" in the settings.', 'Body HUD');
     } catch (e) {
         console.error('[Body HUD] fill failed', e);

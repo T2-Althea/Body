@@ -75,7 +75,7 @@ const { check, finish } = makeChecker();
 
     // Marks.
     await page.click('.bh-actions [data-act="add"]');
-    await page.selectOption('#bh_f_kind', 'mark');
+    await page.click('.bh-cat[data-cat="mark"]');
     check('mark form: part and duration, no severity', await page.locator('.bh-f-lasts').isVisible() && !(await page.locator('.bh-f-sev').isVisible()) && await page.locator('.bh-f-part').isVisible());
     await page.selectOption('#bh_f_part', 'left_forearm');
     await page.fill('#bh_f_type', 'Dragon tattoo');

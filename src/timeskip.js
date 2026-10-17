@@ -52,6 +52,11 @@ export function daysToNextStage(c, realism = 'grounded') {
     return Math.max(0, need / speed - (c.progress || 0));
 }
 
+/** Days left of a set duration, or null. */
+export function daysLeft(c) {
+    return c.endDays > 0 && c.kind !== 'injury' ? Math.max(0, c.endDays - (c.progress || 0)) : null;
+}
+
 const fmtDays = d => {
     if (d < 1) return `${Math.round(d * 24)} h`;
     if (d < 14) return `${Math.round(d)} day${Math.round(d) === 1 ? '' : 's'}`;
@@ -91,8 +96,16 @@ export function planTimeSkip(bodies, who, days, realism, nameOf, partName) {
         let infected = false;
 
         for (const c of body.conditions.values()) {
-            const label = c.part && c.part !== BODY_PART ? `${partName(c.part)} ${c.type ? c.type.toLowerCase() : ''}`.trim() : c.type;
+            const label = c.part && c.part !== BODY_PART && !String(c.kind).startsWith('mind') ? `${partName(c.part)} ${c.type ? c.type.toLowerCase() : ''}`.trim() : c.type;
 
+            // A set duration ("wears off after 3 days") beats the defaults below.
+            // Wounds heal by their own stages instead.
+            if (c.endDays > 0 && c.kind && c.kind !== 'injury') {
+                const total = (c.progress || 0) + days;
+                if (total >= c.endDays) push(key, { t: 'remove', who: key, id: c.id }, `${label} has worn off`, 'clear');
+                else push(key, { t: 'edit', who: key, id: c.id, changes: { progress: total } }, `${label}: time towards wearing off`, 'progress');
+                continue;
+            }
             if (c.kind === 'state') {
                 const fade = STATE_FADE[String(c.type).toLowerCase()];
                 if (fade !== undefined && days >= fade / speed) push(key, { t: 'remove', who: key, id: c.id }, `no longer ${c.type.toLowerCase()}`, 'clear');

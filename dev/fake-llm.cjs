@@ -23,7 +23,11 @@ function chatReply(messages, n) {
 // Canned answers for Body HUD's detection and ✨ fill requests (null = normal chat).
 function taskReply(all) {
     if (all.includes('[BODY_HUD_TASK:fill]')) {
-        return '```json\n{"effect": "Can\'t put weight on it", "details": "Deep puncture", "cause": "Ambush on the road"}\n```';
+        // Answers only the fields asked for, like a real model following the prompt.
+        const asked = ((all.match(/Reply with JSON only: \{([^}]*)\}/) || [])[1] || '').match(/"(\w+)"/g)?.map(k => k.slice(1, -1)) || [];
+        const canned = { type: 'Sprained wrist', effect: "Can't put weight on it", details: 'Deep puncture', cause: 'Ambush on the road', pain: 'moderate' };
+        const out = Object.fromEntries((asked.length ? asked : Object.keys(canned)).map(k => [k, canned[k] ?? '']));
+        return '```json\n' + JSON.stringify(out) + '\n```';
     }
     if (!all.includes('[BODY_HUD_TASK:detect]')) return null;
     const text = (all.split(/NEW MESSAGE — [^\n]*:\n/)[1] || '').toLowerCase();
