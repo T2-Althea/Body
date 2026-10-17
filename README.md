@@ -4,7 +4,7 @@ A SillyTavern extension that keeps track of what has physically happened to the
 characters in a scene (wounds, missing limbs, being soaked and freezing, exhaustion)
 and will remind the AI with a short note before each reply.
 
-**Status: early development (M6).** You record conditions by hand in the HUD, and
+**Status: early development (M7 in progress).** You record conditions by hand in the HUD, and
 a short status note is sent to the AI before each reply. Automatic detection comes
 later. See `docs/concept.md` for the plan.
 
@@ -23,6 +23,15 @@ Requires SillyTavern 1.19.0 or newer.
   Unspecified) sets the mannequin's shape and which sex-specific parts are
   listed; it's guessed from the character card's pronouns until you pick, and
   remembered per character and per persona.
+- **Race** picks a preset (Human, Elf, Beastfolk, Demon / tiefling, Draconic,
+  Winged) or any mix of features: pointed ears, animal ears, horns, tail, wings.
+  Features add their own parts (Left horn, Tail tip, Right wing…) and shapes on
+  the mannequin. Saved per character and per persona.
+- **+ NPC** adds someone who isn't a SillyTavern character (the guard, a wolf),
+  with a body and race. NPCs are in the AI's note while in the scene; **Leaves the
+  scene** takes them out but keeps their body, and they can be brought back. NPCs
+  belong to the chat. Detection also proposes an NPC when someone outside the
+  scene gets hurt (setting: Suggest NPC bodies).
 - The mannequin shows front and back; regions are
   tinted by their worst condition (yellow minor → dark red critical), missing parts
   are dashed. Hover a region for its conditions; click it to zoom into its parts,

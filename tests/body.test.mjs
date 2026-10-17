@@ -64,3 +64,26 @@ test('marks: temporary ones fade with time, permanent ones stay', () => {
     assert.deepEqual(plan.map(p => p.op.id), ['p']);
     assert.equal(planTimeSkip(marked(), ['u'], 1, 'grounded', () => 'Aren', id => id).length, 0);
 });
+
+test('features: merged into the template, shown only for bodies that have them', async () => {
+    const { withFeatures } = await import('../src/model.js');
+    const features = JSON.parse(readFileSync(new URL('../templates/addons.json', import.meta.url)));
+    const full = expandTemplate(withFeatures(tpl, features));
+    assert.equal(full.parts.get('left_horn').addon, 'horns');
+    assert.equal(full.parts.get('tail_tip').addon, 'tail', 'children inherit the feature');
+    assert.equal(full.parts.get('tail').parentId, 'pelvis');
+    assert.equal(full.parts.get('right_wing').regionId, 'right_wing');
+    assert.equal(partShown(full.parts.get('left_horn'), {}), false);
+    assert.equal(partShown(full.parts.get('left_horn'), { features: ['horns'] }), true);
+    assert.equal(partShown(full.parts.get('left_thigh'), {}), true);
+    assert.ok(full.presets.some(p => p.id === 'draconic' && p.features.includes('wings')));
+
+    const m = withFeatures(tpl, features).mannequin;
+    const plain = viewShapes(m, 'back');
+    const dragon = viewShapes(m, 'back', null, ['horns', 'tail', 'wings']);
+    assert.equal(plain.some(s => /horn|tail|wing/.test(s.region)), false);
+    assert.equal(dragon[0].region.endsWith('wing'), true, 'wings are drawn behind the body');
+    assert.ok(dragon.some(s => s.region === 'tail') && dragon.some(s => s.region === 'left_horn'));
+    const elf = viewShapes(m, 'front', null, ['pointed_ears']).filter(s => s.region === 'head');
+    assert.equal(elf.length, 3, 'two ear shapes belong to the head itself');
+});

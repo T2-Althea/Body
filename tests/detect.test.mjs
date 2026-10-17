@@ -52,16 +52,35 @@ test('parseDetection maps actions to ops and flags unknown sides', () => {
         { action: 'temperature', character: 'Mira', celsius: 38.6 },
         { action: 'add', character: 'Mira', kind: 'state', type: 'Wet' },
     ] }, { members, index, ids });
-    assert.equal(proposals.length, 5);
+    assert.equal(proposals.length, 6);
     assert.equal(proposals[0].op.cond.part, 'left_forearm');
     assert.equal(proposals[0].op.cond.severity, 'minor');
     assert.equal(proposals[1].needsSide, 'knee');
     assert.equal(proposals[1].op.cond.severity, 'moderate');
     assert.equal(withSide(proposals[1], 'right').op.cond.part, 'right_knee');
-    assert.deepEqual(proposals[2].op, { t: 'edit', who: 'c:mira.png', id: 'real1', changes: { status: 'treated', bleeding: 'none' } });
-    assert.equal(proposals[3].op.value, 38.6);
-    assert.equal(proposals[4].op.cond.part, '_body');
-    assert.ok(skipped.some(s => s.includes('Guard')));
+    // Someone not in the scene becomes a proposed NPC.
+    assert.deepEqual(proposals[2].npc, { who: 'n:guard', name: 'Guard' });
+    assert.equal(proposals[2].op.who, 'n:guard');
+    assert.match(proposals[2].summary, /^New NPC Guard: Broken nose/);
+    assert.deepEqual(proposals[3].op, { t: 'edit', who: 'c:mira.png', id: 'real1', changes: { status: 'treated', bleeding: 'none' } });
+    assert.equal(proposals[4].op.value, 38.6);
+    assert.equal(proposals[5].op.cond.part, '_body');
+    assert.equal(skipped.length, 0);
+    const off = parseDetection({ changes: [{ action: 'add', character: 'Guard', kind: 'injury', part: 'nose', type: 'Broken nose' }] }, { members, index, ids, allowNpcs: false });
+    assert.equal(off.proposals.length, 0);
+    assert.ok(off.skipped.some(s => s.includes('Guard')));
+});
+
+test('npc ops: join, update, leave', async () => {
+    const { replay: rp, npcKey } = await import('../src/model.js');
+    assert.equal(npcKey('The Old Guard!'), 'n:the_old_guard');
+    const b = rp([
+        { index: 1, ops: [{ t: 'npc_add', who: 'n:wolf', name: 'Wolf', sex: 'male' }, { t: 'add', who: 'n:wolf', cond: { id: 'w', kind: 'injury', part: 'left_leg', type: 'Bite' } }] },
+        { index: 2, ops: [{ t: 'npc_update', who: 'n:wolf', changes: { sex: 'female' } }, { t: 'npc_leave', who: 'n:wolf' }] },
+    ]);
+    const wolf = b.get('n:wolf');
+    assert.deepEqual(wolf.npc, { name: 'Wolf', present: false, sex: 'female' });
+    assert.equal(wolf.conditions.size, 1, 'leaving keeps the body');
 });
 
 test('time skips', () => {

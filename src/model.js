@@ -34,7 +34,7 @@ export function expandTemplate(template) {
     const parts = new Map();
     const order = [];
 
-    function visit(node, parentId, prefix, depth, regionId, parentSensitive = false) {
+    function visit(node, parentId, prefix, depth, regionId, parentSensitive = false, parentAddon = null) {
         const sides = node.sided && !prefix ? ['left', 'right'] : [null];
         for (const side of sides) {
             const p = side ? `${side}_` : prefix;
@@ -48,15 +48,16 @@ export function expandTemplate(template) {
                 regionId: region,
                 sensitive: !!node.sensitive || parentSensitive,
                 sex: node.sex || null,
+                addon: node.addon || parentAddon,
                 children: [],
             });
             order.push(id);
             if (parentId && parts.has(parentId)) parts.get(parentId).children.push(id);
-            for (const child of node.children || []) visit(child, id, p, depth + 1, region, !!node.sensitive || parentSensitive);
+            for (const child of node.children || []) visit(child, id, p, depth + 1, region, !!node.sensitive || parentSensitive, node.addon || parentAddon);
         }
     }
     for (const root of template.parts || []) visit(root, null, '', 0, null);
-    return { parts, order, mannequin: template.mannequin || null };
+    return { parts, order, mannequin: template.mannequin || null, features: template.features || [], presets: template.presets || [] };
 }
 
 export function newId() {
@@ -96,6 +97,19 @@ export function applyOp(bodies, op, messageIndex) {
             break;
         case 'temp':
             body.temp = typeof op.value === 'number' && isFinite(op.value) ? op.value : null;
+            break;
+        // NPCs: someone who isn't a SillyTavern character. They join and leave the
+        // scene through ops too, so they follow swipes, deletions and branches.
+        case 'npc_add':
+            body.npc = { ...(body.npc || {}), name: op.name || body.npc?.name || 'Someone', present: true };
+            if (op.sex) body.npc.sex = op.sex;
+            if (op.features) body.npc.features = op.features;
+            break;
+        case 'npc_update':
+            if (body.npc) body.npc = { ...body.npc, ...op.changes, present: body.npc.present };
+            break;
+        case 'npc_leave':
+            if (body.npc) body.npc = { ...body.npc, present: false };
             break;
     }
 }
@@ -147,10 +161,14 @@ export function fingerprint(text) {
     return (h >>> 0).toString(36);
 }
 
-/** Whether a part is shown for a body of this sex (parts for the other sex are hidden). */
-export function partShown(part, { sex = 'unspecified', hideSensitive = false } = {}) {
+/**
+ * Whether a part is shown for a body: parts for the other sex, and parts from
+ * features (horns, tail…) the body doesn't have, are hidden.
+ */
+export function partShown(part, { sex = 'unspecified', hideSensitive = false, features = [] } = {}) {
     if (!part) return false;
     if (hideSensitive && part.sensitive) return false;
+    if (part.addon && !features.includes(part.addon)) return false;
     return !part.sex || sex === 'unspecified' || part.sex === sex;
 }
 
@@ -166,4 +184,43 @@ export function guessSex(text) {
     if (she >= 3 && she >= he * 2) return 'female';
     if (he >= 3 && he >= she * 2) return 'male';
     return 'unspecified';
+}
+
+/** A stable body key for an NPC name: "The Guard" → "n:the_guard". */
+export function npcKey(name) {
+    return 'n:' + String(name ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+/**
+ * Adds every feature (horns, tail, wings…) to a copy of the template, tagging
+ * its parts and shapes with the feature id. The result describes every
+ * possible body; each character only shows the features they have (partShown,
+ * viewShapes).
+ */
+export function withFeatures(template, featureFile) {
+    const t = structuredClone(template);
+    const find = (nodes, id) => {
+        for (const n of nodes || []) {
+            if (n.id === id) return n;
+            const hit = find(n.children, id);
+            if (hit) return hit;
+        }
+        return null;
+    };
+    for (const f of featureFile?.features || []) {
+        for (const { parent, part } of f.parts || []) {
+            const host = find(t.parts, parent);
+            if (!host) continue;
+            host.children = host.children || [];
+            host.children.push({ ...structuredClone(part), addon: f.id });
+        }
+        if (t.mannequin) {
+            for (const s of f.shapes || []) {
+                (t.mannequin[s.view] = t.mannequin[s.view] || []).push({ ...s, addon: f.id });
+            }
+        }
+    }
+    t.features = (featureFile?.features || []).map(f => ({ id: f.id, name: f.name }));
+    t.presets = featureFile?.presets || [];
+    return t;
 }

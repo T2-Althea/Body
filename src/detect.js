@@ -2,7 +2,7 @@
 // message and proposes body changes, and turns its JSON reply into ops.
 // Pure: no SillyTavern access, so prompt building and parsing are unit-tested.
 
-import { BLEEDING, BODY_PART, BODY_STATES, KINDS, MIND_PART, SEVERITIES, STATUSES, newId } from './model.js';
+import { BLEEDING, BODY_PART, BODY_STATES, KINDS, MIND_PART, SEVERITIES, STATUSES, newId, npcKey } from './model.js';
 import { formatDuration } from './timeskip.js';
 
 export const DETECT_TAG = '[BODY_HUD_TASK:detect]';
@@ -95,7 +95,8 @@ You track physical state in a roleplay. Read the NEW MESSAGE and report only cha
 Rules:
 - Ignore figurative language ("my heart broke", "dead tired", "that killed me"), threats, plans, hypotheticals, dreams and flashbacks.
 - Don't repeat conditions already listed under CURRENT STATE; use "update" to change them (e.g. bandaged → status treated, bleeding none) or "remove" when fully gone.
-- Only the characters listed. Make sure who got hurt is right.
+- Make sure who got hurt is right. Use the names listed; for anyone else (a guard, a wolf, a named stranger) use the name or description the story uses, consistently.
+- Only report other people when something physical happens to them.
 - If the text doesn't say left or right, give the part WITHOUT the left_/right_ prefix; never guess a side.
 - Effects are short capability limits ("can't run; limps"), not descriptions.
 - If the message explicitly skips time ("three days later", "after a week of rest"), add one {"action": "time_passes", "days": <number>}; hours are fractions of a day. Don't report healing yourself for a time skip.
@@ -141,7 +142,7 @@ export function resolvePart(raw, index) {
  * Turns the model's reply into proposals. Each proposal is { pid, who, op, summary }
  * plus `needsSide: base` when the side must be chosen before it can be applied.
  */
-export function parseDetection(json, { members, index, ids }) {
+export function parseDetection(json, { members, index, ids, allowNpcs = true }) {
     const out = [];
     const skipped = [];
     const byName = name => members.find(m => m.name.toLowerCase() === str(name).toLowerCase());
@@ -153,8 +154,20 @@ export function parseDetection(json, { members, index, ids }) {
             out.push({ pid: newId(), who: null, op: { t: 'timeskip', days }, summary: `Time passes: ${formatDuration(days)}` });
             continue;
         }
-        const m = byName(ch.character);
-        if (!m) { skipped.push(`unknown character "${str(ch.character)}"`); continue; }
+        let m = byName(ch.character);
+        let npc = null;
+        if (!m) {
+            // Someone not in the scene yet: offer them as a new NPC (for additions only).
+            const name = str(ch.character);
+            const key = npcKey(name);
+            if (!allowNpcs || str(ch.action).toLowerCase() !== 'add' || !name || key === 'n:' || /^(the )?user$|^you$/i.test(name)) {
+                skipped.push(`unknown character "${name}"`);
+                continue;
+            }
+            const display = name.charAt(0).toUpperCase() + name.slice(1);
+            npc = { who: key, name: display };
+            m = { key, name: display, isUser: false, npc: true };
+        }
         const action = str(ch.action).toLowerCase();
         if (action === 'add') {
             const kind = pick(ch.kind, Object.keys(KINDS), 'injury');
@@ -188,9 +201,9 @@ export function parseDetection(json, { members, index, ids }) {
             };
             const where = needsSide ? `${needsSide.replace(/_/g, ' ')} (side?)` : part === BODY_PART ? 'whole body' : partName(part);
             out.push({
-                pid: newId(), who: m.key, needsSide,
+                pid: newId(), who: m.key, needsSide, ...(npc ? { npc } : {}),
                 op: { t: 'add', who: m.key, cond },
-                summary: `${m.name}: ${kind === 'missing' ? `${where} missing` : `${type} — ${where}`}${cond.severity ? ` (${cond.severity})` : ''}`,
+                summary: `${npc ? 'New NPC ' : ''}${m.name}: ${kind === 'missing' ? `${where} missing` : `${type} — ${where}`}${cond.severity ? ` (${cond.severity})` : ''}`,
             });
         } else if (action === 'update' || action === 'remove') {
             const ref = ids.toReal.get(str(ch.id));

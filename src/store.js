@@ -14,7 +14,7 @@ const ctx = () => SillyTavern.getContext();
  * every group member.
  * @returns {{ key: string, name: string, isUser: boolean, muted?: boolean }[]}
  */
-export function getSceneMembers() {
+export function getSceneMembers({ bodies = null } = {}) {
     const c = ctx();
     const members = [{ key: USER_KEY, name: c.name1 || 'You', isUser: true }];
     if (c.groupId) {
@@ -29,7 +29,16 @@ export function getSceneMembers() {
         const ch = c.characters[c.characterId];
         members.push({ key: 'c:' + ch.avatar, name: ch.name, isUser: false });
     }
+    // NPCs currently in the scene.
+    for (const [key, body] of bodies || buildBodies()) {
+        if (body.npc?.present) members.push({ key, name: body.npc.name, isUser: false, npc: true, sex: body.npc.sex, features: body.npc.features });
+    }
     return members;
+}
+
+/** NPCs who have left the scene (can be brought back). */
+export function getAwayNpcs(bodies = buildBodies()) {
+    return [...bodies].filter(([, b]) => b.npc && !b.npc.present).map(([key, b]) => ({ key, name: b.npc.name }));
 }
 
 export function hasOpenChat() {
@@ -242,7 +251,14 @@ function descriptionOf(member) {
 
 /** { sex, guessed } for a scene member: the saved choice, or a guess from their description. */
 export function memberSex(member, profiles = {}) {
+    if (member.npc) return { sex: member.sex || 'unspecified', guessed: false };
     const saved = profiles[profileKey(member)]?.sex;
     if (saved) return { sex: saved, guessed: false };
     return { sex: guessSex(descriptionOf(member)), guessed: true };
+}
+
+/** Body features (horns, tail…) a scene member has. */
+export function memberFeatures(member, profiles = {}) {
+    if (member.npc) return member.features || [];
+    return profiles[profileKey(member)]?.features || [];
 }

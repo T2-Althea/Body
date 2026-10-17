@@ -106,7 +106,7 @@ async function detect(msg, { manual }) {
     // The message may have been deleted, edited or swiped while we waited.
     if (!c.chat.includes(msg) || fingerprint(msg.mes) !== fp || (msg.swipe_id ?? 0) !== swipe) return;
 
-    const { proposals, skipped } = parseDetection(json, { members, index, ids });
+    const { proposals, skipped } = parseDetection(json, { members, index, ids, allowNpcs: opts.getSettings().detectNpcs !== false });
     if (skipped.length) console.debug('[Body HUD] detection skipped:', skipped);
     if (!proposals.length) {
         if (manual) toastr.info('Body HUD: no body changes found in that message.');
@@ -117,7 +117,8 @@ async function detect(msg, { manual }) {
         // A time skip always waits for its preview; unknown sides wait for a pick.
         const ready = proposals.filter(p => !p.needsSide && p.op.t !== 'timeskip');
         const unsure = proposals.filter(p => p.needsSide || p.op.t === 'timeskip');
-        if (ready.length) await writeDetectedOps(msg, ready.map(p => p.op), fp);
+        // A new NPC's proposal brings them into the scene first.
+        if (ready.length) await writeDetectedOps(msg, ready.flatMap(p => (p.npc ? [{ t: 'npc_add', who: p.npc.who, name: p.npc.name }, p.op] : [p.op])), fp);
         if (unsure.length) await addPending(msg, unsure, fp);
         toastr.info(
             `${ready.length ? `Applied ${ready.length} change${ready.length > 1 ? 's' : ''}` : ''}${ready.length && unsure.length ? '; ' : ''}${unsure.length ? `${unsure.length} waiting for you in the HUD` : ''}. Undo in the HUD.`,

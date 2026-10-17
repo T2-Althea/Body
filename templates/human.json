@@ -339,7 +339,7 @@
         }
     ],
     "mannequin": {
-        "viewBox": "0 0 100 215",
+        "viewBox": "0 -10 100 225",
         "front": [
             {
                 "region": "head",

@@ -2,7 +2,7 @@
 // Everything goes through SillyTavern.getContext() so the extension works no
 // matter which folder it is installed into.
 
-import { expandTemplate } from './src/model.js';
+import { expandTemplate, withFeatures } from './src/model.js';
 import { buildNote, estimateTokens } from './src/note.js';
 import { applyLayout, initPanel, render } from './src/panel.js';
 import { initRunner, onNewMessage } from './src/runner.js';
@@ -33,6 +33,7 @@ const defaultSettings = Object.freeze({
     detectUser: true,       // also check the user's own messages
     detectPrefilter: true,  // skip messages without injury/state words
     detectContext: true,    // include the previous message for context
+    detectNpcs: true,       // propose bodies for hurt people who aren't in the scene
     modelProfile: '',       // Connection Profile id; empty = the chat's current model
     taskMaxTokens: 2000,    // reply allowance for detection and ✨ (reasoning models think first)
 });
@@ -54,8 +55,11 @@ function saveSettings() {
 }
 
 async function loadTemplate() {
-    const res = await fetch(new URL('./templates/human.json', import.meta.url));
-    templateIndex = expandTemplate(await res.json());
+    const [base, features] = await Promise.all([
+        fetch(new URL('./templates/human.json', import.meta.url)).then(r => r.json()),
+        fetch(new URL('./templates/addons.json', import.meta.url)).then(r => r.json()).catch(() => null),
+    ]);
+    templateIndex = expandTemplate(withFeatures(base, features));
 }
 
 /** The note for the current chat, or an empty one. */
@@ -208,6 +212,10 @@ function renderSettings() {
                     <input type="checkbox" id="body_hud_prefilter" ${s.detectPrefilter ? 'checked' : ''}>
                     <span>Skip messages with no injury/state words</span>
                 </label>
+                <label class="checkbox_label" title="When someone outside the scene (a guard, a wolf) gets hurt, propose adding them as an NPC with that injury.">
+                    <input type="checkbox" id="body_hud_detect_npcs" ${s.detectNpcs ? 'checked' : ''}>
+                    <span>Suggest NPC bodies</span>
+                </label>
                 <label class="checkbox_label">
                     <input type="checkbox" id="body_hud_detect_ctx" ${s.detectContext ? 'checked' : ''}>
                     <span>Include the previous message for context</span>
@@ -241,6 +249,7 @@ function renderSettings() {
     bind('#body_hud_detect_user', 'detectUser', el => el.checked);
     bind('#body_hud_prefilter', 'detectPrefilter', el => el.checked);
     bind('#body_hud_detect_ctx', 'detectContext', el => el.checked);
+    bind('#body_hud_detect_npcs', 'detectNpcs', el => el.checked);
     bind('#body_hud_task_tokens', 'taskMaxTokens', num(200, 32000));
     setupProfileDropdown();
 }

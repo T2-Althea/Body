@@ -14,8 +14,11 @@ async function openST(url, { viewport = { width: 1600, height: 900 } } = {}) {
     await page.waitForFunction(() => window.SillyTavern?.getContext?.(), null, { timeout: 60000 });
     await page.waitForTimeout(3000);
     const onboarding = page.locator('.popup:visible .popup-button-ok');
-    if (await onboarding.count()) await onboarding.first().click();
+    // It can vanish on its own a moment later, so don't insist.
+    if (await onboarding.count()) await onboarding.first().click({ timeout: 3000 }).catch(() => {});
     await page.waitForFunction(() => SillyTavern.getContext().characters.length > 0, null, { timeout: 30000 });
+    // Body/race choices persist in SillyTavern's settings between runs; start clean.
+    await page.evaluate(() => { const s = SillyTavern.getContext().extensionSettings.body_hud; if (s) s.profiles = {}; });
     await page.evaluate(() => $('#api_button_openai').trigger('click'));
     await page.waitForFunction(() => SillyTavern.getContext().onlineStatus !== 'no_connection', null, { timeout: 30000 });
     return { browser, page, errors, state };

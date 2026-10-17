@@ -3,7 +3,7 @@
 
 import {
     BLEEDING, BODY_PART, BODY_STATES, KINDS, MARK_DURATIONS, MIND_PART, SEVERITIES, SEXES, STATUSES,
-    isAffected, missingParts, newId, partShown, severityRank,
+    isAffected, missingParts, newId, npcKey, partShown, severityRank,
 } from './model.js';
 import { withSide } from './detect.js';
 import { describeFailure } from './llm.js';
@@ -11,7 +11,7 @@ import { renderMannequin } from './mannequin.js';
 import { isBusy, scanLatest, suggestFields } from './runner.js';
 import { UNITS, daysToNextStage, formatDuration, planTimeSkip } from './timeskip.js';
 import {
-    buildBodies, collectPending, getSceneMembers, hasOpenChat, memberSex, profileKey, recentDetected, resolvePending,
+    buildBodies, collectPending, getAwayNpcs, getSceneMembers, hasOpenChat, memberFeatures, memberSex, profileKey, recentDetected, resolvePending,
     undoOp, undoSkip, writeManualOps,
 } from './store.js';
 
@@ -67,17 +67,32 @@ export function initPanel(options) {
     $('#body_hud_tab').on('click', () => setOpen(true));
     $('#body_hud_close').on('click', () => setOpen(false));
     $('#body_hud_panel')
-        .on('click', '.bh-member', function () { selected = $(this).attr('data-key'); form = null; zoom = null; render(); })
+        .on('click', '.bh-member:not([data-act])', function () { selected = $(this).attr('data-key'); form = null; zoom = null; render(); })
         .on('click', '.bh-m-region', function () { zoom = this.getAttribute('data-region'); render(); })
         .on('click', '[data-act]', onAction)
-        .on('change', '#bh_p_sex', function () {
+        .on('change', '#bh_p_sex', async function () {
             const m = selectedMember();
             if (!m) return;
+            // An NPC belongs to this chat, so its body is stored in the chat like everything else.
+            if (m.npc) {
+                await writeManualOps([{ t: 'npc_update', who: m.key, changes: { sex: this.value } }]);
+                render();
+                return;
+            }
             const s = opts.getSettings();
             s.profiles = s.profiles || {};
             s.profiles[profileKey(m)] = { ...(s.profiles[profileKey(m)] || {}), sex: this.value };
             opts.saveSettings();
             render();
+        })
+        .on('change', '#bh_p_race', function () {
+            const preset = opts.getIndex()?.presets.find(p => p.id === this.value);
+            if (preset) saveFeatures([...preset.features]);
+        })
+        .on('change', '.bh-feature input', function () {
+            const have = new Set(currentFeatures());
+            if (this.checked) have.add(this.getAttribute('data-feature')); else have.delete(this.getAttribute('data-feature'));
+            saveFeatures([...have]);
         })
         .on('change', '#bh_f_kind', () => updateFormFields())
         .on('change', '#bh_s_amount, #bh_s_unit, #bh_s_scope', () => {
@@ -154,14 +169,18 @@ export function render() {
     $('#body_hud_busy').toggle(isBusy());
 
     const bodies = buildBodies();
-    const members = getSceneMembers();
-    if (!members.some(m => m.key === selected)) selected = members[members.length - 1]?.key;
+    const members = getSceneMembers({ bodies });
+    if (!members.some(m => m.key === selected)) selected = members.find(m => !m.isUser && !m.npc)?.key || members[members.length - 1]?.key;
 
     $('#body_hud_tab').toggleClass('bh-alert', members.some(m => isAffected(bodies.get(m.key))));
+    const away = getAwayNpcs(bodies);
     membersEl.html(members.map(m => `
-        <div class="bh-member menu_button ${m.key === selected ? 'bh-active' : ''}" data-key="${esc(m.key)}">
-            ${esc(m.name)}${m.isUser ? ' <small>(you)</small>' : ''}${m.muted ? ' <small>(muted)</small>' : ''}${isAffected(bodies.get(m.key)) ? '<span class="bh-dot"></span>' : ''}
-        </div>`).join('') + renderProfile(members));
+        <div class="bh-member menu_button ${m.key === selected ? 'bh-active' : ''} ${m.npc ? 'bh-npc' : ''}" data-key="${esc(m.key)}">
+            ${esc(m.name)}${m.isUser ? ' <small>(you)</small>' : ''}${m.npc ? ' <small>(NPC)</small>' : ''}${m.muted ? ' <small>(muted)</small>' : ''}${isAffected(bodies.get(m.key)) ? '<span class="bh-dot"></span>' : ''}
+        </div>`).join('')
+        + '<div class="bh-member menu_button bh-addnpc" data-act="npc-new" title="Add someone who isn\'t a SillyTavern character: the guard, a wolf…"><i class="fa-solid fa-plus"></i> NPC</div>'
+        + (away.length ? `<div class="bh-away">Left the scene: ${away.map(a => `<span class="bh-link" data-act="npc-return" data-key="${esc(a.key)}" data-name="${esc(a.name)}" title="Bring back">${esc(a.name)} ↩</span>`).join(', ')}</div>` : '')
+        + renderProfile(members));
 
     // A form editing a proposal (or previewing a story time skip) closes once that
     // proposal has been applied or rejected some other way.
@@ -173,7 +192,7 @@ export function render() {
     if (zoom && index.parts.has(zoom)) html += renderZoom(body, index);
     else if (opts.getSettings().showMannequin) {
         zoom = null;
-        html += renderMannequin(index.mannequin, body, index, { variant: currentSex() === 'female' ? 'feminine' : null });
+        html += renderMannequin(index.mannequin, body, index, { variant: currentSex() === 'female' ? 'feminine' : null, features: currentFeatures() });
     }
     if (form) html += renderForm(body, index);
 
@@ -211,7 +230,7 @@ export function render() {
     if (missing.length) {
         const lost = missingParts(body, index);
         html += section('Missing', missing.map(c => {
-            const below = [...lost].filter(id => id !== c.part && isDescendant(index, id, c.part) && partShown(index.parts.get(id), { sex: currentSex() })).length;
+            const below = [...lost].filter(id => id !== c.part && isDescendant(index, id, c.part) && partShown(index.parts.get(id), { sex: currentSex(), features: currentFeatures() })).length;
             return condRow(c, index, below ? `includes ${below} part${below > 1 ? 's' : ''} below it` : '');
         }).join(''));
     }
@@ -257,12 +276,13 @@ function renderZoom(body, index) {
         const p = index.parts.get(id);
         if (!p) return;
         if (id !== zoom && p.region) {
+            if (!partShown(p, { sex: currentSex(), features: currentFeatures() })) return;
             rows.push(`<div class="bh-zrow bh-zlink ${lost.has(id) ? 'bh-zmissing' : ''}" style="padding-left:${depth * 12}px" data-act="zoom" data-region="${esc(id)}">
                 ${esc(p.name)} <i class="fa-solid fa-chevron-right"></i></div>`);
             return;
         }
         const conds = condsOn(id);
-        if (!partShown(p, { sex: currentSex(), hideSensitive }) && !conds.length) return;
+        if (!partShown(p, { sex: currentSex(), hideSensitive, features: currentFeatures() }) && !conds.length) return;
         const chipClass = c => c.kind === 'missing' ? 'missing' : c.kind === 'mark' ? 'mark' : c.severity;
         const chips = conds.map(c => `<span class="bh-zchip bh-sev-${esc(chipClass(c))}" data-act="edit" data-id="${esc(c.id)}">${esc(c.kind === 'missing' ? 'missing' : c.type)}</span>`).join('');
         rows.push(`<div class="bh-zrow ${lost.has(id) ? 'bh-zmissing' : ''}" style="padding-left:${depth * 12}px">
@@ -301,7 +321,7 @@ function renderPending(members) {
         return `<div class="bh-cond bh-pending">
             <div class="bh-cond-main">
                 <div>${esc(p.summary)}</div>${extra}
-                <div class="bh-cond-meta">from message #${p.index}${p.needsSide ? ' · which side?' : ''}${p.who && p.who !== selected ? ` · ${esc(name(p.who))}` : ''}</div>
+                <div class="bh-cond-meta">from message #${p.index}${p.needsSide ? ' · which side?' : ''}${p.who && p.who !== selected && !p.npc ? ` · ${esc(name(p.who))}` : ''}</div>
             </div>
             <div class="bh-cond-btns">${buttons}
                 <div class="fa-solid fa-xmark bh-iconbtn" data-act="reject" ${ref} title="Reject"></div>
@@ -462,6 +482,19 @@ function renderSkipForm(members) {
 
 function renderForm(body, index) {
     if (form.mode === 'skip') return renderSkipForm(getSceneMembers());
+    if (form.mode === 'npc') {
+        return `<div class="bh-form">
+            <div class="bh-section-title">New NPC</div>
+            <label>Name <input id="bh_n_name" class="text_pole" placeholder="e.g. The guard, Grey wolf"></label>
+            <label>Body <select id="bh_n_sex" class="text_pole">${Object.entries(SEXES).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+            ${index.presets?.length ? `<label>Race <select id="bh_n_race" class="text_pole">${index.presets.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label>` : ''}
+            <div class="bh-cond-meta">NPCs belong to this chat. They're in the AI's note while they're in the scene.</div>
+            <div class="bh-actions">
+                <div class="menu_button" data-act="npc-save">Add</div>
+                <div class="menu_button" data-act="cancel">Cancel</div>
+            </div>
+        </div>`;
+    }
     if (form.mode === 'temp') {
         const v = body.temp === null ? '' : toUnit(body.temp);
         return `<div class="bh-form">
@@ -482,7 +515,7 @@ function renderForm(body, index) {
     const fill = field => `<span class="fa-solid fa-wand-magic-sparkles bh-fill" data-act="fill" data-field="${field}" title="Suggest this from the condition and the recent story"></span>`;
     const hideSensitive = opts.getSettings().hideSensitive;
     const partOpts = index.order
-        .filter(id => partShown(index.parts.get(id), { sex: currentSex(), hideSensitive }) || id === v.part)
+        .filter(id => partShown(index.parts.get(id), { sex: currentSex(), hideSensitive, features: currentFeatures() }) || id === v.part)
         .map(id => {
             const p = index.parts.get(id);
             return `<option value="${esc(id)}" ${id === v.part ? 'selected' : ''}>${'  '.repeat(p.depth)}${esc(p.name)}</option>`;
@@ -582,15 +615,42 @@ async function onAction(e) {
         opts.onStateChange?.();
     };
     switch (act) {
-        case 'approve': { const p = findPending(); if (p) await afterStore(resolvePending(pIndex, pid, p.op)); return; }
-        case 'side': { const p = findPending(); if (p) await afterStore(resolvePending(pIndex, pid, withSide(p, $(this).attr('data-side')).op)); return; }
+        case 'approve': { const p = findPending(); if (p) await afterStore(resolvePending(pIndex, pid, opsFor(p, p.op))); return; }
+        case 'side': { const p = findPending(); if (p) await afterStore(resolvePending(pIndex, pid, opsFor(p, withSide(p, $(this).attr('data-side')).op))); return; }
+        case 'npc-new': form = { mode: 'npc', scroll: true }; render(); return;
+        case 'npc-save': {
+            const name = String($('#bh_n_name').val() || '').trim();
+            if (!name) { toastr.warning('Give the NPC a name.'); return; }
+            const key = npcKey(name);
+            if (key === 'n:' || getSceneMembers().some(m => m.key === key || m.name.toLowerCase() === name.toLowerCase())) {
+                toastr.warning('Someone with that name is already in the scene.');
+                return;
+            }
+            form = null;
+            selected = key;
+            const preset = opts.getIndex()?.presets.find(p => p.id === $('#bh_n_race').val());
+            await afterStore(writeManualOps([{ t: 'npc_add', who: key, name, sex: $('#bh_n_sex').val(), features: preset ? [...preset.features] : [] }]));
+            return;
+        }
+        case 'npc-return':
+            selected = $(this).attr('data-key');
+            await afterStore(writeManualOps([{ t: 'npc_add', who: selected, name: $(this).attr('data-name') }]));
+            return;
+        case 'npc-leave': {
+            const m = selectedMember();
+            if (!m?.npc) return;
+            selected = null;
+            await afterStore(writeManualOps([{ t: 'npc_leave', who: m.key }]));
+            toastr.info(`${m.name} left the scene. Their body is kept: bring them back from "Left the scene".`, 'Body HUD');
+            return;
+        }
         case 'reject': await afterStore(resolvePending(pIndex, pid, null)); return;
         case 'approve-all':
         case 'reject-all':
             await afterStore((async () => {
                 for (const p of collectPending()) {
                     if (act === 'approve-all' && (p.needsSide || p.op.t === 'timeskip')) continue;
-                    await resolvePending(p.index, p.pid, act === 'approve-all' ? p.op : null);
+                    await resolvePending(p.index, p.pid, act === 'approve-all' ? opsFor(p, p.op) : null);
                 }
             })());
             return;
@@ -598,7 +658,7 @@ async function onAction(e) {
             const p = findPending();
             if (!p) return;
             selected = p.who;
-            form = { mode: 'review', index: p.index, pid: p.pid, who: p.who, cond: p.op.cond, scroll: true };
+            form = { mode: 'review', index: p.index, pid: p.pid, who: p.who, cond: p.op.cond, npc: p.npc, scroll: true };
             render();
             return;
         }
@@ -660,9 +720,10 @@ async function onAction(e) {
             const { cond, error } = readForm();
             if (error) { toastr.warning(error); return; }
             if (form.mode === 'review') {
+                const form0 = form;
                 const { index: i, pid: rpid, who, cond: orig } = form;
                 form = null;
-                await afterStore(resolvePending(i, rpid, { t: 'add', who, cond: { ...orig, ...cond } }));
+                await afterStore(resolvePending(i, rpid, opsFor(form0, { t: 'add', who, cond: { ...orig, ...cond } })));
                 return;
             }
             ops = form.mode === 'edit'
@@ -747,6 +808,44 @@ function selectedMember() {
     return getSceneMembers().find(m => m.key === selected) || null;
 }
 
+/** Body features (horns, tail…) of the selected character. */
+function currentFeatures() {
+    const m = selectedMember();
+    return m ? memberFeatures(m, opts.getSettings().profiles) : [];
+}
+
+// Race: a preset picks a set of features; the checkboxes fine-tune it.
+function renderRace(m) {
+    const index = opts.getIndex();
+    if (!index?.features?.length) return '';
+    const have = memberFeatures(m, opts.getSettings().profiles);
+    const same = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+    const preset = index.presets.find(p => same(p.features, have));
+    const presetOpts = index.presets.map(p => `<option value="${esc(p.id)}" ${preset?.id === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')
+        + `<option value="" ${preset ? '' : 'selected'}>Custom</option>`;
+    const boxes = index.features.map(f => `<label class="bh-feature"><input type="checkbox" data-feature="${esc(f.id)}" ${have.includes(f.id) ? 'checked' : ''}> ${esc(f.name)}</label>`).join('');
+    return `<div class="bh-profile bh-race">
+        <span>Race</span>
+        <select id="bh_p_race" class="text_pole">${presetOpts}</select>
+        <span class="bh-features">${boxes}</span>
+    </div>`;
+}
+
+async function saveFeatures(features) {
+    const m = selectedMember();
+    if (!m) return;
+    if (m.npc) {
+        await writeManualOps([{ t: 'npc_update', who: m.key, changes: { features } }]);
+    } else {
+        const s = opts.getSettings();
+        s.profiles = s.profiles || {};
+        s.profiles[profileKey(m)] = { ...(s.profiles[profileKey(m)] || {}), features };
+        opts.saveSettings();
+    }
+    zoom = null;
+    render();
+}
+
 /** The selected character's body sex: saved choice or a guess from their description. */
 function currentSex() {
     const m = selectedMember();
@@ -758,9 +857,16 @@ function renderProfile(members) {
     if (!m) return '';
     const { sex, guessed } = memberSex(m, opts.getSettings().profiles);
     const choices = Object.entries(SEXES).map(([k, label]) => `<option value="${k}" ${k === sex ? 'selected' : ''}>${label}</option>`).join('');
-    return `<div class="bh-profile" title="Sets the mannequin's shape and which sex-specific parts are listed. Saved for this ${m.isUser ? 'persona' : 'character'} in every chat.">
+    const where = m.npc ? 'NPC, saved in this chat' : `saved for this ${m.isUser ? 'persona' : 'character'} in every chat`;
+    return `<div class="bh-profile" title="Sets the mannequin's shape and which sex-specific parts are listed (${where}).">
         <span>Body</span>
         <select id="bh_p_sex" class="text_pole">${choices}</select>
         ${guessed ? '<small class="bh-guess">guessed from the description</small>' : ''}
-    </div>`;
+        ${m.npc ? '<span class="bh-link bh-leave" data-act="npc-leave" title="Takes them out of the scene and the AI\'s note; their body is kept">Leaves the scene</span>' : ''}
+    </div>${renderRace(m)}`;
+}
+
+// A proposal about a new NPC also brings that NPC into the scene.
+function opsFor(p, op) {
+    return p?.npc ? [{ t: 'npc_add', who: p.npc.who, name: p.npc.name }, op] : op;
 }

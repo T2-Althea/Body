@@ -1,0 +1,217 @@
+{
+    "notes": "Body features that can be added to the base template per character. Each feature adds parts (\"parent\" is a base part id; \"sided\" works as in the template) and mannequin shapes (\"view\": front|back; \"under\": drawn behind the body; \"keepRegion\": a sided shape that belongs to the named region itself instead of left_/right_ copies). Presets are named sets of features.",
+    "features": [
+        {
+            "id": "pointed_ears",
+            "name": "Pointed ears",
+            "parts": [],
+            "shapes": [
+                {
+                    "view": "front",
+                    "region": "head",
+                    "sided": true,
+                    "keepRegion": true,
+                    "d": "M60 14 C64 12 69 8 74 3 C71 11 66 18 61 21 Z"
+                },
+                {
+                    "view": "back",
+                    "region": "head",
+                    "sided": true,
+                    "keepRegion": true,
+                    "d": "M60 14 C64 12 69 8 74 3 C71 11 66 18 61 21 Z"
+                }
+            ]
+        },
+        {
+            "id": "animal_ears",
+            "name": "Animal ears",
+            "parts": [
+                {
+                    "parent": "head",
+                    "part": {
+                        "id": "animal_ear",
+                        "name": "Animal ear",
+                        "sided": true,
+                        "region": true
+                    }
+                }
+            ],
+            "shapes": [
+                {
+                    "view": "front",
+                    "region": "animal_ear",
+                    "sided": true,
+                    "d": "M53 6 C55 0 58 -5 61 -8 C62 -2 61 3 59 8 Z"
+                },
+                {
+                    "view": "back",
+                    "region": "animal_ear",
+                    "sided": true,
+                    "d": "M53 6 C55 0 58 -5 61 -8 C62 -2 61 3 59 8 Z"
+                }
+            ]
+        },
+        {
+            "id": "horns",
+            "name": "Horns",
+            "parts": [
+                {
+                    "parent": "head",
+                    "part": {
+                        "id": "horn",
+                        "name": "Horn",
+                        "sided": true,
+                        "region": true
+                    }
+                }
+            ],
+            "shapes": [
+                {
+                    "view": "front",
+                    "region": "horn",
+                    "sided": true,
+                    "d": "M55 5 C57 -1 61 -5 67 -7 C63 -3 61 1 59 7 Z"
+                },
+                {
+                    "view": "back",
+                    "region": "horn",
+                    "sided": true,
+                    "d": "M55 5 C57 -1 61 -5 67 -7 C63 -3 61 1 59 7 Z"
+                }
+            ]
+        },
+        {
+            "id": "tail",
+            "name": "Tail",
+            "parts": [
+                {
+                    "parent": "pelvis",
+                    "part": {
+                        "id": "tail",
+                        "name": "Tail",
+                        "region": true,
+                        "children": [
+                            {
+                                "id": "tail_base",
+                                "name": "Tail base"
+                            },
+                            {
+                                "id": "tail_middle",
+                                "name": "Middle of the tail"
+                            },
+                            {
+                                "id": "tail_tip",
+                                "name": "Tail tip"
+                            }
+                        ]
+                    }
+                }
+            ],
+            "shapes": [
+                {
+                    "view": "back",
+                    "region": "tail",
+                    "d": "M46 100 C45 118 52 134 66 142 C75 147 86 146 91 137 C84 141 76 139 70 134 C60 126 57 114 57 101 Z"
+                }
+            ]
+        },
+        {
+            "id": "wings",
+            "name": "Wings",
+            "parts": [
+                {
+                    "parent": "upper_back",
+                    "part": {
+                        "id": "wing",
+                        "name": "Wing",
+                        "sided": true,
+                        "region": true,
+                        "children": [
+                            {
+                                "id": "wing_root",
+                                "name": "Wing root"
+                            },
+                            {
+                                "id": "wing_bone",
+                                "name": "Wing bone"
+                            },
+                            {
+                                "id": "wing_surface",
+                                "name": "Wing feathers or membrane"
+                            }
+                        ]
+                    }
+                }
+            ],
+            "shapes": [
+                {
+                    "view": "front",
+                    "region": "wing",
+                    "sided": true,
+                    "under": true,
+                    "d": "M64 42 C76 32 90 26 96 33 C94 44 86 54 76 60 C72 52 68 47 64 42 Z"
+                },
+                {
+                    "view": "back",
+                    "region": "wing",
+                    "sided": true,
+                    "under": true,
+                    "d": "M62 44 C76 30 94 22 99 34 C99 52 92 72 80 88 C76 76 71 64 64 56 Z"
+                }
+            ]
+        }
+    ],
+    "presets": [
+        {
+            "id": "human",
+            "name": "Human",
+            "features": []
+        },
+        {
+            "id": "elf",
+            "name": "Elf",
+            "features": [
+                "pointed_ears"
+            ]
+        },
+        {
+            "id": "beastfolk",
+            "name": "Beastfolk (animal ears)",
+            "features": [
+                "animal_ears"
+            ]
+        },
+        {
+            "id": "beastfolk_tail",
+            "name": "Beastfolk (ears and tail)",
+            "features": [
+                "animal_ears",
+                "tail"
+            ]
+        },
+        {
+            "id": "demon",
+            "name": "Demon / tiefling",
+            "features": [
+                "horns",
+                "tail"
+            ]
+        },
+        {
+            "id": "draconic",
+            "name": "Draconic",
+            "features": [
+                "horns",
+                "tail",
+                "wings"
+            ]
+        },
+        {
+            "id": "winged",
+            "name": "Winged",
+            "features": [
+                "wings"
+            ]
+        }
+    ]
+}

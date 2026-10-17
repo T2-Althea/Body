@@ -30,7 +30,7 @@ const { check, finish } = makeChecker();
 
     await page.click('#body_hud_tab');
     check('tab opens the panel', await visible('#body_hud_panel'));
-    const members = await page.locator('.bh-member').allInnerTexts();
+    const members = await page.locator('.bh-member:not([data-act])').allInnerTexts();
     check('scene lists user and character', members.length === 2 && members.some(m => m.includes('Seraphina')), members.join(' | '));
     check('empty body says nothing is sent', (await panelText()).includes('Nothing is sent'));
 

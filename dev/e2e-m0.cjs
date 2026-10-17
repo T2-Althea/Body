@@ -3,7 +3,7 @@
 // (the injection checks from M0 now live in e2e-m2.cjs).
 // Usage: node dev/e2e-m0.cjs <st-url> <fake-llm-request-log>
 const fs = require('fs');
-const { chromium } = require('playwright');
+const { openST } = require('./st-page.cjs');
 
 const url = process.argv[2] || 'http://127.0.0.1:8000/';
 const reqLog = process.argv[3];
@@ -20,23 +20,8 @@ const check = (name, ok, detail = '') => {
 };
 
 (async () => {
-    const browser = await chromium.launch();
-    const page = await browser.newPage();
-    const errors = [];
-    let loaded = false;
-    page.on('pageerror', e => errors.push(e.message));
-    page.on('console', m => { if (m.text().includes('[Body HUD] loaded')) loaded = true; });
-
-    await page.goto(url);
-    await page.waitForFunction(() => window.SillyTavern?.getContext?.(), null, { timeout: 60000 });
-    await page.waitForTimeout(3000);
-    // Fresh installs show a first-run persona prompt; accept the default name.
-    const onboarding = page.locator('.popup:visible .popup-button-ok');
-    if (await onboarding.count()) await onboarding.first().click();
-    await page.waitForFunction(() => SillyTavern.getContext().characters.length > 0, null, { timeout: 30000 });
-    // Connect to the fake backend configured by dev/configure-st.cjs.
-    await page.evaluate(() => $('#api_button_openai').trigger('click'));
-    await page.waitForFunction(() => SillyTavern.getContext().onlineStatus !== 'no_connection', null, { timeout: 30000 });
+    const { browser, page, errors, state } = await openST(url);
+    const loaded = state.loaded;
     check('extension loaded', loaded);
     check('settings panel rendered', await page.locator('#body_hud_enabled').count() === 1);
 

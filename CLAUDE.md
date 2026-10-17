@@ -68,9 +68,16 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
       Template v2 adds nipples and sex-specific genital parts (sensitive, inherited).
       New kind `mark` (tattoo/paint/brand; status permanent|temporary; temporary
       fades in 3 days on time skips; one low-priority "Marks:" note line, optional).
-- [ ] M7 Template editor and NPC bodies. Include **race presets** (user request):
-      elf (pointed ears), horned, tailed, winged… as template add-ons that add
-      parts and mannequin shapes (ears, horns, tail, wings) on top of the human base.
+- [ ] M7 Template editor and NPC bodies.
+      - [x] NPCs: ops `npc_add` / `npc_update` / `npc_leave` (body.npc = {name,
+        present, sex, features}), keys `n:<slug>` (`npcKey`). Present NPCs are scene
+        members (note, time skips, detection). Detection turns an unknown hurt
+        character into a proposal with `npc` set; approving prepends `npc_add`.
+      - [x] Race features (`templates/addons.json`): features add parts and shapes
+        to one superset template (`withFeatures`, tagged `addon`); `partShown` and
+        `viewShapes` hide what a body doesn't have. Presets = named feature sets.
+        Per character/persona in `profiles[key].features`, per NPC in body.npc.
+      - [ ] Editor for custom features/presets in the UI.
 
 ## Extras (user requests, after M7)
 - **Emotions / mood:** a Mood line per character with a quick picker (builds on

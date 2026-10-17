@@ -506,3 +506,54 @@
     border-left-style: dotted;
     border-left-color: var(--SmartThemeQuoteColor);
 }
+
+/* ---------- NPCs ---------- */
+
+.bh-member.bh-npc {
+    font-style: italic;
+}
+
+.bh-addnpc {
+    opacity: 0.7;
+}
+
+.bh-away {
+    flex-basis: 100%;
+    font-size: 0.85em;
+    opacity: 0.8;
+}
+
+.bh-link {
+    cursor: pointer;
+    text-decoration: underline dotted;
+}
+
+.bh-link:hover {
+    color: var(--SmartThemeQuoteColor);
+}
+
+.bh-leave {
+    margin-left: auto;
+    font-size: 0.9em;
+}
+
+/* ---------- race / features ---------- */
+
+.bh-race {
+    flex-wrap: wrap;
+}
+
+.bh-features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    flex-basis: 100%;
+    font-size: 0.85em;
+}
+
+.bh-feature {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+}
