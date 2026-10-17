@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { expandTemplate, replay } from '../src/model.js';
 import { moodNoteLine, normalizeMood } from '../src/mood.js';
-import { SLOTS, cleanItems, clothesNoteLine, describeClothes, slotWearable } from '../src/clothing.js';
+import { SLOTS, applyClothesOp, cleanItems, clothesNoteLine, describeClothes, slotWearable } from '../src/clothing.js';
 import { buildNote, estimateTokens } from '../src/note.js';
 import { buildDetectPrompt, mightMatter, parseDetection, shortIds } from '../src/detect.js';
 
@@ -31,7 +31,7 @@ test('note: strong moods, and mild ones that change behaviour', () => {
     assert.equal(noteOf(replay([op({ t: 'mood', label: 'anger', intensity: 'strong' })]), { moodInNote: false }), '');
 });
 
-test('clothing: wear, take off, outfits', () => {
+test('old one-item records still replay', () => {
     let b = replay([
         op({ t: 'wear', slot: 'top', item: 'White blouse', desc: 'Silk' }),
         op({ t: 'wear', slot: 'shoes', item: 'Boots' }, 2),
@@ -40,8 +40,24 @@ test('clothing: wear, take off, outfits', () => {
     assert.deepEqual(Object.keys(b.clothes), ['shoes']);
     assert.equal(b.clothesAt, 3);
     b = replay([op({ t: 'wear', slot: 'top', item: 'Shirt' }), op({ t: 'outfit', items: { outerwear: { item: 'Cloak', desc: '' } } }, 4)]).get(MIRA);
-    assert.deepEqual(b.clothes, { outerwear: { item: 'Cloak', desc: '' } });
-    assert.deepEqual(cleanItems({ top: { item: ' Tunic ' }, shoes: { item: '' }, wings: { item: 'Harness' } }), { top: { item: 'Tunic', desc: '' } });
+    assert.deepEqual(b.clothes, { outerwear: [{ item: 'Cloak', desc: '' }] });
+    assert.deepEqual(cleanItems({ top: { item: ' Tunic ' }, shoes: { item: '' }, wings: { item: 'Harness' } }), { top: [{ item: 'Tunic', desc: '' }] });
+});
+
+test('a slot holds several items: add, update, rename, take one off', () => {
+    let c = {};
+    c = applyClothesOp(c, { t: 'wear', slot: 'outerwear', item: 'Coat', add: true });
+    c = applyClothesOp(c, { t: 'wear', slot: 'outerwear', item: 'Capelet', desc: 'Blue', add: true });
+    assert.deepEqual(c.outerwear.map(i => i.item), ['Coat', 'Capelet'], 'adding doesn\'t replace');
+    c = applyClothesOp(c, { t: 'wear', slot: 'outerwear', item: 'capelet', desc: 'Vibrant blue', add: true });
+    assert.deepEqual(c.outerwear, [{ item: 'Coat', desc: '' }, { item: 'capelet', desc: 'Vibrant blue' }], 'same name updates it');
+    c = applyClothesOp(c, { t: 'wear', slot: 'outerwear', item: 'Long coat', add: true, was: 'Coat' });
+    assert.deepEqual(c.outerwear.map(i => i.item), ['Long coat', 'capelet'], 'renamed in place');
+    c = applyClothesOp(c, { t: 'unwear', slot: 'outerwear', item: 'Long coat' });
+    assert.deepEqual(c.outerwear.map(i => i.item), ['capelet']);
+    c = applyClothesOp(c, { t: 'unwear', slot: 'outerwear' });
+    assert.deepEqual(c, {});
+    assert.equal(describeClothes({ top: [{ item: 'Blouse' }], waist: [{ item: 'Bodice', desc: 'Black' }] }), 'blouse, bodice (black)');
 });
 
 test('Wearing line: recent or always; missing parts wear nothing', () => {
@@ -68,11 +84,11 @@ test('detection: clothing and mood', () => {
     assert.doesNotMatch(plain.system, /"action": "mood"|"action": "wear"/);
     const { proposals } = parseDetection({ changes: [
         { action: 'wear', character: 'Mira', slot: 'outerwear', item: 'Red cloak', description: 'Wool' },
-        { action: 'wear', character: 'Mira', slot: 'top', item: '' },
+        { action: 'wear', character: 'Mira', slot: 'top', item: '', off: true },
         { action: 'wear', character: 'Mira', slot: 'tail', item: 'Bow' },
         { action: 'mood', character: 'Mira', mood: 'Fear', intensity: 'strong' },
     ] }, { members, index, ids: shortIds(members, bodies) });
-    assert.deepEqual(proposals.map(p => p.summary), ['Mira: wears Red cloak (outerwear)', 'Mira: takes off (top)', 'Mira: mood → fear (strong)']);
+    assert.deepEqual(proposals.map(p => p.summary), ['Mira: wears Red cloak (outerwear)', 'Mira: takes off everything (top)', 'Mira: mood → fear (strong)']);
     assert.ok(mightMatter('She pulls on her boots.'));
     assert.ok(!mightMatter('She smiles warmly.'));
     assert.ok(mightMatter('She smiles warmly.', { mood: true }));

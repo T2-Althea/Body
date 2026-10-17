@@ -134,8 +134,11 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
   `-part` = left/right pair), `cleanItems`, `slotWearable` (slot's part fully
   missing → left out of the note), `clothesNoteLine` (prio 8; settings
   `clothesInNote`: recent = 10 messages after `body.clothesAt` | always | off).
-  Ops `{t:'wear', who, slot, item, desc}` (empty item = take off) and
-  `{t:'outfit', who, items}` (replaces all). Outfits: own in
+  A slot holds a list of items (`slotItems` also reads old single-item records).
+  Ops (`applyClothesOp`): `{t:'wear', slot, item, desc, add: true, was?}` adds or
+  updates (old records without `add` replace the slot), `{t:'unwear', slot,
+  item?}` takes one item (or the slot) off, `{t:'outfit', items}` replaces all.
+  Slots include Waist (bodice, corset, belt) and Back (backpack, quiver). Outfits: own in
   `profiles[key].outfits`, shared in `settings.outfitLibrary` (NPCs: library only).
   Panel: collapsible Clothing section (`settings.clothesOpen`), item form, outfit
   picker / Wear / Save as outfit / Take all off. Detection: "wearing:" state and

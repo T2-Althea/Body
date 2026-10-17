@@ -6,7 +6,7 @@ import { BLEEDING, BODY_PART, BODY_STATES, INTENSITY_LABELS, KINDS, MIND_PART, P
 import { formatDuration } from './timeskip.js';
 import { meterStateText, resolveLevel } from './meters.js';
 import { MOODS, normalizeMood } from './mood.js';
-import { SLOTS } from './clothing.js';
+import { SLOTS, slotItems } from './clothing.js';
 
 export const DETECT_TAG = '[BODY_HUD_TASK:detect]';
 export const FILL_TAG = '[BODY_HUD_TASK:fill]';
@@ -104,7 +104,7 @@ export function buildDetectPrompt({ members, bodies, index, message, previous, m
         const meterText = meters ? meterStateText(meters.defs, meters.enabled(m.key), body) : '';
         if (meterText) conds.push(`  meters: ${meterText}`);
         if (clothes && body?.clothes && Object.keys(body.clothes).length) {
-            conds.push(`  wearing: ${SLOTS.filter(s => body.clothes[s.id]).map(s => `${s.id}=${body.clothes[s.id].item}`).join('; ')}`);
+            conds.push(`  wearing: ${SLOTS.filter(s => slotItems(body.clothes, s.id).length).map(s => `${s.id}=${slotItems(body.clothes, s.id).map(it => it.item).join(' + ')}`).join('; ')}`);
         }
         if (mood) conds.push(`  mood: ${body?.mood ? `${body.mood.label}${body.mood.intensity === 'strong' ? ' (strong)' : ''}` : 'neutral'}`);
         return `${m.name}${m.isUser ? ' (the user)' : ''}:\n${conds.length ? conds.join('\n') : '  (nothing)'}`;
@@ -123,7 +123,7 @@ Rules:
 - If the message explicitly skips time ("three days later", "after a week of rest"), add one {"action": "time_passes", "days": <number>}; hours are fractions of a day. Don't report healing yourself for a time skip.
 - Forcing a physical feat past one's limits costs an injury (torn muscle, cracked bone…): add it.
 ${meters?.defs.length ? `- Meters (listed per character) change only when the message shows it: eating or drinking, sleeping or resting, running or fighting (stamina), casting (mana). Use the level names given below; move one or two levels at a time unless the text says more.
-` : ''}${clothes ? `- Clothing: report putting on, taking off or changing clothes and accessories with "wear" (one change per slot; "item": "" when taken off). Slots: ${SLOTS.map(s => s.id).join(', ')}.
+` : ''}${clothes ? `- Clothing: report putting on or taking off clothes and accessories with "wear", one change per item ("off": true when taken off; "item": "" with "off": true empties the whole slot). A slot can hold several items (a blouse and a vest). Slots: ${SLOTS.map(s => s.id).join(', ')}.
 ` : ''}${mood ? `- Mood: if the message clearly shows a character's emotion changing, add one "mood" change for them (label from: ${MOODS.join(', ')}; "strong" only for intense emotion). Skip it if the mood is the same.
 ` : ''}- Most messages change nothing. Then return {"changes": []}.
 
@@ -132,7 +132,7 @@ Reply with JSON only:
  {"action": "add", "character": "<name>", "kind": "injury|missing|state|effect|natural|mind_lasting|mind_current|mark", "part": "<part id>", "type": "<what, e.g. Arrow wound>", "severity": "minor|moderate|severe|critical", "bleeding": "none|light|moderate|heavy", "status": "fresh|treated|healing|scarred|permanent", "pain": "none|mild|moderate|severe|agonizing", "details": "", "effect": "", "cause": "", "hidden": false},
  {"action": "update", "character": "<name>", "id": "<c1…>", "changes": {"status": "treated", "bleeding": "none"}},
  {"action": "remove", "character": "<name>", "id": "<c1…>"},
- {"action": "temperature", "character": "<name>", "celsius": 38.5},${clothes ? '\n {"action": "wear", "character": "<name>", "slot": "<slot>", "item": "<item, or empty>", "description": ""},' : ''}${mood ? '\n {"action": "mood", "character": "<name>", "mood": "<label>", "intensity": "mild|strong"},' : ''}${meters?.defs.length ? '\n {"action": "meter", "character": "<name>", "meter": "<meter id>", "level": "<level name>"},' : ''}
+ {"action": "temperature", "character": "<name>", "celsius": 38.5},${clothes ? '\n {"action": "wear", "character": "<name>", "slot": "<slot>", "item": "<item>", "description": "", "off": false},' : ''}${mood ? '\n {"action": "mood", "character": "<name>", "mood": "<label>", "intensity": "mild|strong"},' : ''}${meters?.defs.length ? '\n {"action": "meter", "character": "<name>", "meter": "<meter id>", "level": "<level name>"},' : ''}
  {"action": "time_passes", "days": 3}
 ]}
 kind "mark" = tattoos, body paint, brands (status "permanent" or "temporary"); kind "injury" = anything else on a body part; "state" = whole-body states (${BODY_STATES.join(', ').toLowerCase()}…), part optional; "effect" = poison, drugs, medicine and its side effects, magic enhancements or curses (severity = intensity), no part; "natural" = period, pregnancy, heat and similar natural body states, no part; mind kinds need no part. "pain" is optional.
@@ -258,10 +258,11 @@ export function parseDetection(json, { members, index, ids, allowNpcs = true, me
             const slot = SLOTS.find(x => x.id === s || x.name.toLowerCase() === s);
             if (!slot) { skipped.push(`unknown slot "${str(ch.slot)}"`); continue; }
             const item = str(ch.item);
+            const off = ch.off === true || String(ch.off).toLowerCase() === 'true' || !item;
             out.push({
                 pid: newId(), who: m.key, ...(npc ? { npc } : {}),
-                op: { t: 'wear', who: m.key, slot: slot.id, item, desc: str(ch.description) },
-                summary: `${npc ? 'New NPC ' : ''}${m.name}: ${item ? `wears ${item}` : 'takes off'} (${slot.name.toLowerCase()})`,
+                op: off ? { t: 'unwear', who: m.key, slot: slot.id, item } : { t: 'wear', who: m.key, slot: slot.id, item, desc: str(ch.description), add: true },
+                summary: `${npc ? 'New NPC ' : ''}${m.name}: ${off ? `takes off ${item || 'everything'}` : `wears ${item}`} (${slot.name.toLowerCase()})`,
             });
         } else if (action === 'mood') {
             const label = normalizeMood(ch.mood);

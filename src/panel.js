@@ -11,7 +11,7 @@ import { tempLabel } from './note.js';
 import { renderMannequin } from './mannequin.js';
 import { activeMeters, meterLevel, meterRatio } from './meters.js';
 import { MOODS, MOOD_EMOJI, moodWord } from './mood.js';
-import { SLOTS, cleanItems, slotWearable } from './clothing.js';
+import { SLOTS, cleanItems, slotItems, slotWearable } from './clothing.js';
 import { isBusy, scanLatest, suggestFields } from './runner.js';
 import { UNITS, daysLeft, daysToNextStage, formatDuration, planTimeSkip } from './timeskip.js';
 import {
@@ -386,6 +386,7 @@ function renderLog(members, index) {
             case 'remove': return 'removed a condition';
             case 'temp': return op.value === null ? 'temperature cleared' : `temperature ${op.value} °C`;
             case 'wear': return op.item ? `wears ${op.item}` : `takes off (${op.slot})`;
+            case 'unwear': return `takes off ${op.item || `everything (${op.slot})`}`;
             case 'mood': return `mood → ${op.label}${op.intensity === 'strong' ? ' (strong)' : ''}`;
             case 'meter': return `${op.id} → level ${op.level}`;
             default: return op.t;
@@ -799,16 +800,18 @@ async function onAction(e) {
         case 'edit-meters': opts.editMeters?.(); return;
         case 'meter': form = { mode: 'meter', id: $(this).attr('data-id'), scroll: true }; render(); return;
         case 'wear-new': form = { mode: 'wear', scroll: true }; render(); return;
-        case 'wear-edit': form = { mode: 'wear', slot: $(this).attr('data-slot'), scroll: true }; render(); return;
+        case 'wear-edit': form = { mode: 'wear', slot: $(this).attr('data-slot'), item: $(this).attr('data-item'), scroll: true }; render(); return;
         case 'wear-remove':
-            await afterStore(writeManualOps([{ t: 'wear', who: selected, slot: $(this).attr('data-slot'), item: '' }]));
+            await afterStore(writeManualOps([{ t: 'unwear', who: selected, slot: $(this).attr('data-slot'), item: $(this).attr('data-item') }]));
             return;
         case 'wear-save': {
             const slot = $('#bh_w_slot').val();
             const item = String($('#bh_w_item').val() || '').trim();
             if (!item) { toastr.warning('Name the item (or remove it with the trash button).'); return; }
-            const ops = [{ t: 'wear', who: selected, slot, item, desc: String($('#bh_w_desc').val() || '').trim() }];
-            if (form.slot && form.slot !== slot) ops.unshift({ t: 'wear', who: selected, slot: form.slot, item: '' });
+            const desc = String($('#bh_w_desc').val() || '').trim();
+            const moved = form.item && form.slot !== slot;
+            const ops = [{ t: 'wear', who: selected, slot, item, desc, add: true, ...(form.item && !moved ? { was: form.item } : {}) }];
+            if (moved) ops.unshift({ t: 'unwear', who: selected, slot: form.slot, item: form.item });
             form = null;
             await afterStore(writeManualOps(ops));
             return;
@@ -1236,12 +1239,13 @@ function findOutfit(ref) {
 function renderClothing(body, index) {
     const clothes = body.clothes || {};
     const missing = missingParts(body, index);
-    const worn = SLOTS.filter(s => clothes[s.id]);
-    const rows = worn.map(s => `<div class="bh-cloth">
-        <span class="bh-cloth-slot">${esc(s.name)}</span>
-        <span class="bh-cloth-item">${esc(clothes[s.id].item)}${clothes[s.id].desc ? ` <small>— ${esc(clothes[s.id].desc)}</small>` : ''}${slotWearable(s, missing) ? '' : ' <small title="That part is missing, so this is left out of the note">(missing part)</small>'}</span>
-        <span class="fa-solid fa-pen bh-iconbtn" data-act="wear-edit" data-slot="${s.id}" title="Edit"></span>
-        <span class="fa-solid fa-trash-can bh-iconbtn" data-act="wear-remove" data-slot="${s.id}" title="Take off"></span>
+    // One row per item; the slot name only on the first item of each slot.
+    const worn = SLOTS.flatMap(s => slotItems(clothes, s.id).map((it, i) => ({ s, it, first: i === 0 })));
+    const rows = worn.map(({ s, it, first }) => `<div class="bh-cloth">
+        <span class="bh-cloth-slot">${first ? esc(s.name) : ''}</span>
+        <span class="bh-cloth-item">${esc(it.item)}${it.desc ? ` <small>— ${esc(it.desc)}</small>` : ''}${slotWearable(s, missing) ? '' : ' <small title="That part is missing, so this is left out of the note">(missing part)</small>'}</span>
+        <span class="fa-solid fa-pen bh-iconbtn" data-act="wear-edit" data-slot="${s.id}" data-item="${esc(it.item)}" title="Edit"></span>
+        <span class="fa-solid fa-trash-can bh-iconbtn" data-act="wear-remove" data-slot="${s.id}" data-item="${esc(it.item)}" title="Take off"></span>
     </div>`).join('');
     const m = selectedMember();
     const own = outfitList('own', false);
@@ -1269,12 +1273,12 @@ function renderClothing(body, index) {
 }
 
 function renderWearForm(body) {
-    const cur = form.slot ? body.clothes?.[form.slot] : null;
-    const slotId = form.slot || SLOTS.find(s => !body.clothes?.[s.id])?.id || SLOTS[0].id;
+    const cur = form.item ? slotItems(body.clothes, form.slot).find(it => it.item === form.item) : null;
+    const slotId = form.slot || SLOTS[0].id;
     const slot = SLOTS.find(s => s.id === slotId);
     return `<div class="bh-form">
         <div class="bh-section-title">${cur ? 'Edit item' : 'Add an item'}</div>
-        <label>Slot <select id="bh_w_slot" class="text_pole">${SLOTS.map(s => `<option value="${s.id}" ${s.id === slotId ? 'selected' : ''}>${esc(s.name)}${body.clothes?.[s.id] && s.id !== form.slot ? ' (replaces what\'s there)' : ''}</option>`).join('')}</select></label>
+        <label>Slot <select id="bh_w_slot" class="text_pole">${SLOTS.map(s => `<option value="${s.id}" ${s.id === slotId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
         <label>Item <input id="bh_w_item" class="text_pole" list="bh_w_items" value="${esc(cur?.item || '')}" placeholder="e.g. ${esc(slot.examples[0])}"></label>
         <datalist id="bh_w_items">${slot.examples.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
         <label>Description (optional) <input id="bh_w_desc" class="text_pole" value="${esc(cur?.desc || '')}" placeholder="e.g. Black leather, worn at the heels"></label>

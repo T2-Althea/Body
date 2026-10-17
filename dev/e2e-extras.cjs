@@ -129,6 +129,20 @@ const { check, finish } = makeChecker();
     await page.waitForTimeout(300);
     check('wearing a saved outfit puts everything back', (await clothRows()).length === 2);
     await addItem('outerwear', 'Silver gown');
+    await addItem('outerwear', 'Capelet', 'Vibrant blue');
+    await addItem('waist', 'Bodice', 'Black, laced');
+    rows = await clothRows();
+    check('a slot holds several items (capelet over a gown); bodice in Waist', rows.some(r => r.includes('Silver gown')) && rows.some(r => r.includes('Capelet')) && rows.some(r => r.includes('Waist') && r.includes('Bodice')), rows.join(' / '));
+    await page.click('.bh-cloth:has-text("Capelet") [data-act="wear-edit"]');
+    await page.fill('#bh_w_item', 'Blue capelet');
+    await page.click('[data-act="wear-save"]');
+    await page.waitForTimeout(300);
+    rows = await clothRows();
+    check('editing one item leaves the other in its slot alone', rows.some(r => r.includes('Blue capelet') && r.includes('Vibrant blue')) && rows.some(r => r.includes('Silver gown')) && !rows.some(r => /^\s*Capelet/.test(r)), rows.join(' / '));
+    await page.screenshot({ path: path.join(shots, 'extras-layers.png'), clip: await page.locator('.bh-clothing').boundingBox() });
+    await page.click('.bh-cloth:has-text("Blue capelet") [data-act="wear-remove"]');
+    await page.click('.bh-cloth:has-text("Bodice") [data-act="wear-remove"]');
+    await page.waitForTimeout(300);
     await page.click('[data-act="outfit-save-form"]');
     await page.fill('#bh_o_name', 'Ball gown');
     await page.check('#bh_o_shared');
@@ -148,7 +162,11 @@ const { check, finish } = makeChecker();
     check('detection proposes the clothing change', pending.some(p => p.includes('wears Red cloak (outerwear)')), pending.join(' / '));
     await page.click('[data-act="approve-all"]');
     await page.waitForTimeout(400);
-    check('approved: replaces the outerwear', (await clothRows()).some(r => r.includes('Red cloak') && r.includes('Wool')) && !(await clothRows()).some(r => r.includes('Silver gown')));
+    check('approved: added next to what was there', (await clothRows()).some(r => r.includes('Red cloak') && r.includes('Wool')) && (await clothRows()).some(r => r.includes('Silver gown')));
+    // Take the gown off: only that item goes.
+    await page.click('.bh-cloth:has-text("Silver gown") [data-act="wear-remove"]');
+    await page.waitForTimeout(300);
+    check('taking one item off keeps the rest of the slot', !(await clothRows()).some(r => r.includes('Silver gown')) && (await clothRows()).some(r => r.includes('Red cloak')));
     await setSetting('#body_hud_detect_mode', 'manual');
 
     // {{outfit}} inside the card's description: replaced when the prompt is built.

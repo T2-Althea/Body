@@ -1,6 +1,8 @@
 // Pure data model: templates, conditions and replay. No SillyTavern access here,
 // so this file can be tested in plain Node.
 
+import { applyClothesOp } from './clothing.js';
+
 export const SEVERITIES = ['minor', 'moderate', 'severe', 'critical'];
 export const BLEEDING = ['none', 'light', 'moderate', 'heavy'];
 export const STATUSES = ['fresh', 'treated', 'healing', 'scarred', 'permanent'];
@@ -160,18 +162,10 @@ export function applyOp(bodies, op, messageIndex) {
             body.mood = op.label && op.label !== 'neutral' ? { label: op.label, intensity: op.intensity === 'strong' ? 'strong' : 'mild' } : null;
             break;
         // Clothing: one slot, or a whole outfit replacing everything.
-        case 'wear': {
-            if (!op.slot) break;
-            const clothes = { ...(body.clothes || {}) };
-            const item = String(op.item ?? '').trim();
-            if (item) clothes[op.slot] = { item, desc: String(op.desc ?? '').trim() };
-            else delete clothes[op.slot];
-            body.clothes = clothes;
-            body.clothesAt = messageIndex;
-            break;
-        }
+        case 'wear':
+        case 'unwear':
         case 'outfit':
-            body.clothes = structuredClone(op.items || {});
+            body.clothes = applyClothesOp(body.clothes, op);
             body.clothesAt = messageIndex;
             break;
         // Meters (hunger, mana…): a level index, 0 = comfortable.
