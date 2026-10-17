@@ -42,3 +42,19 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
 - [ ] M5 Swipe/branch handling (fingerprints, regen clearing).
 - [ ] M6 Time skips and realism levels.
 - [ ] M7 Template editor and NPC bodies.
+
+## Extras (user requests, after M7)
+- **Emotions / mood:** a Mood line per character with a quick picker (builds on
+  "Mind: current state"). Auto source options: read SillyTavern's Expressions
+  extension (28 labels; `/expression-last` returns a character's last one) or
+  report mood from the M4 detection call. Note only includes strong/relevant moods.
+- **Hunger / thirst:** stepped levels (e.g. fed → peckish → hungry → starving),
+  no numbers. Set manually, by M4 detection (eating/drinking), or by M6 time
+  skips (Grounded/Simulation only). In the note only when it matters.
+- **Clothing & accessories (no visuals):** slots per character (head, ears,
+  face/piercings, neck, top, outerwear, arms, wrists, hands, fingers, underwear,
+  pants, legwear, leg accessories, shoes), item + short description; slots can
+  attach to template parts. Named outfits per character, plus a shared outfit
+  library usable across characters. One compact "Wearing:" line in the note
+  only when relevant. Later ties: wet clothing → wet state, armor covers regions,
+  missing parts can't wear items. M4 detection can propose clothing changes.
