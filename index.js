@@ -28,7 +28,13 @@ const defaultSettings = Object.freeze({
     tempInNote: 'abnormal',
     notePreviewOpen: false,
     customFeatures: { features: [], presets: [] }, // made in the races & features editor
-    customMeters: null,     // the user's meter file ({ meters: [...] }); null = the built-in templates/meters.json
+    moodSource: 'manual',   // manual | expressions (SillyTavern's Expressions extension) | detect (the detection call)
+    moodInNote: true,       // strong or behaviour-changing moods in the AI's note
+    customMeters: null,
+    clothesInNote: 'recent', // always | recent (for a few messages after a change) | off
+    detectClothes: true,     // detection reports putting on / taking off clothes
+    outfitLibrary: [],       // shared outfits: [{ name, items: { slot: { item, desc } } }]
+    clothesOpen: false,      // the panel's Clothing section is expanded     // the user's meter file ({ meters: [...] }); null = the built-in templates/meters.json
     realism: 'grounded',
     naturalStates: DEFAULT_NATURAL_STATES, // offered under Body → Natural; "Name (female|male|any): stage, stage"
     profiles: {},           // body sex per character/persona: { 'c:<avatar>' | 'u:<persona>': { sex } }
@@ -144,6 +150,9 @@ function computeNote({ skipDetectedAt = -1 } = {}) {
         realism: s.realism,
         marksInNote: s.marksInNote,
         meters: meterContext(getMeterDefs(), s.profiles),
+        moodInNote: s.moodInNote,
+        clothesInNote: s.clothesInNote,
+        chatLength: ctx().chat?.length ?? 0,
     }, estimateTokens);
 }
 
@@ -222,6 +231,14 @@ function renderSettings() {
                         <option value="simulation" ${sel('simulation', s.realism)}>Simulation</option>
                     </select>
                 </div>
+                <div class="bh-setting-row" title="Where characters' moods come from. You can always pick a mood by hand in the HUD.">
+                    <span>Mood from</span>
+                    <select id="body_hud_mood_source" class="text_pole">
+                        <option value="manual" ${sel('manual', s.moodSource)}>Only set by hand</option>
+                        <option value="expressions" ${sel('expressions', s.moodSource)}>SillyTavern's Expressions extension</option>
+                        <option value="detect" ${sel('detect', s.moodSource)}>Automatic detection (same request)</option>
+                    </select>
+                </div>
                 <div class="bh-setting-col" title="Offered under Body → Natural in the condition form, filtered by the body's sex. One per line: Name (female, male or any): stages separated by commas.">
                     <span>Natural body states</span>
                     <textarea id="body_hud_natural" class="text_pole" rows="5">${s.naturalStates.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea>
@@ -245,6 +262,18 @@ function renderSettings() {
                     <input type="checkbox" id="body_hud_marks" ${s.marksInNote ? 'checked' : ''}>
                     <span>Include marks (tattoos, paint) in the note</span>
                 </label>
+                <label class="checkbox_label" title="Only strong moods, or mild ones that change behaviour (fear, anger, grief…).">
+                    <input type="checkbox" id="body_hud_mood_note" ${s.moodInNote ? 'checked' : ''}>
+                    <span>Include moods in the note</span>
+                </label>
+                <div class="bh-setting-row" title="A short 'Wearing:' line. It's the first thing cut when the note is too long.">
+                    <span>Clothing in note</span>
+                    <select id="body_hud_clothes_note" class="text_pole">
+                        <option value="recent" ${sel('recent', s.clothesInNote)}>For a few messages after a change</option>
+                        <option value="always" ${sel('always', s.clothesInNote)}>Always</option>
+                        <option value="off" ${sel('off', s.clothesInNote)}>Never</option>
+                    </select>
+                </div>
                 <div class="bh-setting-row" title="0 = after the latest message, 1 = just above it, and so on.">
                     <span>Depth</span>
                     <input id="body_hud_depth" class="text_pole" type="number" min="0" max="50" value="${s.depth}">
@@ -301,6 +330,10 @@ function renderSettings() {
                     <span>Suggest NPC bodies</span>
                 </label>
                 <label class="checkbox_label">
+                    <input type="checkbox" id="body_hud_detect_clothes" ${s.detectClothes ? 'checked' : ''}>
+                    <span>Notice clothing changes</span>
+                </label>
+                <label class="checkbox_label">
                     <input type="checkbox" id="body_hud_detect_ctx" ${s.detectContext ? 'checked' : ''}>
                     <span>Include the previous message for context</span>
                 </label>
@@ -323,6 +356,10 @@ function renderSettings() {
     bind('#body_hud_mannequin', 'showMannequin', el => el.checked);
     bind('#body_hud_realism', 'realism', el => el.value);
     bind('#body_hud_marks', 'marksInNote', el => el.checked);
+    bind('#body_hud_mood_source', 'moodSource', el => el.value);
+    bind('#body_hud_clothes_note', 'clothesInNote', el => el.value);
+    bind('#body_hud_detect_clothes', 'detectClothes', el => el.checked);
+    bind('#body_hud_mood_note', 'moodInNote', el => el.checked);
     bind('#body_hud_natural', 'naturalStates', el => {
         if (!el.value.trim()) el.value = DEFAULT_NATURAL_STATES;
         return el.value;

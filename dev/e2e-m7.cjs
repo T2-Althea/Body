@@ -32,6 +32,7 @@ const { check, finish } = makeChecker();
     // Clicks a point that is really inside an SVG shape (the middle of a curved
     // shape's bounding box can be empty space).
     const clickShape = async locator => {
+        await locator.evaluate(p => p.ownerSVGElement.scrollIntoView({ block: 'center' }));
         const pt = await locator.evaluate(p => {
             const b = p.getBBox();
             const svg = p.ownerSVGElement;

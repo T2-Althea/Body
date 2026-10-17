@@ -10,6 +10,8 @@ import { describeFailure } from './llm.js';
 import { tempLabel } from './note.js';
 import { renderMannequin } from './mannequin.js';
 import { activeMeters, meterLevel, meterRatio } from './meters.js';
+import { MOODS, MOOD_EMOJI, moodWord } from './mood.js';
+import { SLOTS, cleanItems, slotWearable } from './clothing.js';
 import { isBusy, scanLatest, suggestFields } from './runner.js';
 import { UNITS, daysLeft, daysToNextStage, formatDuration, planTimeSkip } from './timeskip.js';
 import {
@@ -105,6 +107,10 @@ export function initPanel(options) {
             const preset = opts.getIndex()?.presets.find(p => p.id === this.value);
             if (preset) saveFeatures([...preset.features]);
         })
+        .on('change', '#bh_w_slot', function () {
+            const slot = SLOTS.find(s => s.id === this.value);
+            $('#bh_w_items').html((slot?.examples || []).map(x => `<option value="${esc(x)}">`).join(''));
+        })
         .on('change', '.bh-meter-pick input', function () {
             const have = new Set(currentMeters());
             if (this.checked) have.add(this.getAttribute('data-meter')); else have.delete(this.getAttribute('data-meter'));
@@ -132,8 +138,9 @@ export function initPanel(options) {
         });
     // 'toggle' doesn't bubble, so listen in the capture phase.
     document.getElementById('body_hud_panel').addEventListener('toggle', e => {
-        if (!e.target.classList?.contains('bh-note')) return;
-        opts.getSettings().notePreviewOpen = e.target.open;
+        const key = e.target.classList?.contains('bh-note') ? 'notePreviewOpen' : e.target.classList?.contains('bh-clothing') ? 'clothesOpen' : null;
+        if (!key || opts.getSettings()[key] === e.target.open) return;
+        opts.getSettings()[key] = e.target.open;
         opts.saveSettings();
     }, true);
 
@@ -237,6 +244,7 @@ export function render() {
     }
     html += '</div>';
     html += renderMeters(body);
+    html += renderMood(body);
     html += '</div>';
 
     if (effects.length) html += section('Status effects', effects.sort((a, b) => severityRank(b.severity) - severityRank(a.severity)).map(c => condRow(c, index)).join(''));
@@ -264,6 +272,7 @@ export function render() {
     }
 
     if (marks.length) html += section('Marks', marks.map(c => condRow(c, index)).join(''));
+    html += renderClothing(body, index);
 
     if (!isAffected(body)) {
         html += '<div class="bh-empty">No conditions. Nothing is sent to the AI for this character.</div>';
@@ -376,6 +385,9 @@ function renderLog(members, index) {
             case 'edit': return Object.entries(op.changes).map(([k, v]) => `${k} → ${v}`).join(', ');
             case 'remove': return 'removed a condition';
             case 'temp': return op.value === null ? 'temperature cleared' : `temperature ${op.value} °C`;
+            case 'wear': return op.item ? `wears ${op.item}` : `takes off (${op.slot})`;
+            case 'mood': return `mood → ${op.label}${op.intensity === 'strong' ? ' (strong)' : ''}`;
+            case 'meter': return `${op.id} → level ${op.level}`;
             default: return op.t;
         }
     };
@@ -525,6 +537,9 @@ function renderSkipForm(members) {
 function renderForm(body, index) {
     if (form.mode === 'skip') return renderSkipForm(getSceneMembers());
     if (form.mode === 'meter') return renderMeterForm(body);
+    if (form.mode === 'mood') return renderMoodForm(body);
+    if (form.mode === 'wear') return renderWearForm(body);
+    if (form.mode === 'outfit-save') return renderOutfitSaveForm();
     if (form.mode === 'npc') {
         return `<div class="bh-form">
             <div class="bh-section-title">New NPC</div>
@@ -783,6 +798,72 @@ async function onAction(e) {
         case 'edit-features': opts.editFeatures?.(); return;
         case 'edit-meters': opts.editMeters?.(); return;
         case 'meter': form = { mode: 'meter', id: $(this).attr('data-id'), scroll: true }; render(); return;
+        case 'wear-new': form = { mode: 'wear', scroll: true }; render(); return;
+        case 'wear-edit': form = { mode: 'wear', slot: $(this).attr('data-slot'), scroll: true }; render(); return;
+        case 'wear-remove':
+            await afterStore(writeManualOps([{ t: 'wear', who: selected, slot: $(this).attr('data-slot'), item: '' }]));
+            return;
+        case 'wear-save': {
+            const slot = $('#bh_w_slot').val();
+            const item = String($('#bh_w_item').val() || '').trim();
+            if (!item) { toastr.warning('Name the item (or remove it with the trash button).'); return; }
+            const ops = [{ t: 'wear', who: selected, slot, item, desc: String($('#bh_w_desc').val() || '').trim() }];
+            if (form.slot && form.slot !== slot) ops.unshift({ t: 'wear', who: selected, slot: form.slot, item: '' });
+            form = null;
+            await afterStore(writeManualOps(ops));
+            return;
+        }
+        case 'outfit-clear':
+            await afterStore(writeManualOps([{ t: 'outfit', who: selected, items: {} }]));
+            return;
+        case 'outfit-wear': {
+            const outfit = findOutfit($('#bh_outfit').val());
+            if (!outfit) { toastr.info('Pick an outfit first.'); return; }
+            await afterStore(writeManualOps([{ t: 'outfit', who: selected, items: cleanItems(outfit.items), outfit: outfit.name }]));
+            return;
+        }
+        case 'outfit-delete': {
+            const ref = String($('#bh_outfit').val() || '');
+            const outfit = findOutfit(ref);
+            if (!outfit) { toastr.info('Pick an outfit first.'); return; }
+            const list = outfitList(ref.startsWith('lib:') ? 'lib' : 'own', false);
+            list.splice(list.indexOf(outfit), 1);
+            opts.saveSettings();
+            toastr.info(`Outfit "${outfit.name}" deleted.`, 'Body HUD');
+            render();
+            return;
+        }
+        case 'outfit-save-form':
+            if (!Object.keys(cleanItems(buildBodies().get(selected)?.clothes)).length) { toastr.info('Nothing is worn yet: add some items first.'); return; }
+            form = { mode: 'outfit-save', scroll: true };
+            render();
+            return;
+        case 'outfit-save': {
+            const name = String($('#bh_o_name').val() || '').trim();
+            if (!name) { toastr.warning('Give the outfit a name.'); return; }
+            const shared = $('#bh_o_shared').is(':checked') || selectedMember()?.npc;
+            const list = outfitList(shared ? 'lib' : 'own', true);
+            const items = cleanItems(buildBodies().get(selected)?.clothes);
+            const existing = list.find(o => o.name.toLowerCase() === name.toLowerCase());
+            if (existing) existing.items = items; else list.push({ name, items });
+            opts.saveSettings();
+            form = null;
+            toastr.success(`Outfit "${name}" saved${shared ? ' in the shared library' : ''}.`, 'Body HUD');
+            render();
+            return;
+        }
+        case 'mood': form = { mode: 'mood', intensity: buildBodies().get(selected)?.mood?.intensity || 'mild', scroll: true }; render(); return;
+        case 'mood-intensity':
+            form.intensity = $(this).attr('data-intensity');
+            $('.bh-mood-int').each(function () { $(this).toggleClass('bh-active', this.getAttribute('data-intensity') === form.intensity); });
+            return;
+        case 'mood-set': {
+            const label = $(this).attr('data-mood');
+            const intensity = form?.intensity || 'mild';
+            form = null;
+            await afterStore(writeManualOps([{ t: 'mood', who: selected, label, intensity }]));
+            return;
+        }
         case 'meter-set': {
             const level = Number($(this).attr('data-level'));
             const meterId = $(this).attr('data-id');
@@ -1128,6 +1209,112 @@ function renderMeters(body) {
         </div>`;
     }).join('');
     return `<div class="bh-meters">${rows}</div>`;
+}
+
+// ---------- clothing ----------
+
+/** The selected character's own outfits ('own') or the shared library ('lib'). */
+function outfitList(which, create) {
+    const s = opts.getSettings();
+    if (which === 'lib') {
+        if (!s.outfitLibrary && create) s.outfitLibrary = [];
+        return s.outfitLibrary || [];
+    }
+    const m = selectedMember();
+    if (!m || m.npc) return [];
+    s.profiles = s.profiles || {};
+    const key = profileKey(m);
+    if (!s.profiles[key]?.outfits && create) s.profiles[key] = { ...(s.profiles[key] || {}), outfits: [] };
+    return s.profiles[key]?.outfits || [];
+}
+
+function findOutfit(ref) {
+    const [which, i] = String(ref || '').split(':');
+    return which === 'own' || which === 'lib' ? outfitList(which, false)[Number(i)] || null : null;
+}
+
+function renderClothing(body, index) {
+    const clothes = body.clothes || {};
+    const missing = missingParts(body, index);
+    const worn = SLOTS.filter(s => clothes[s.id]);
+    const rows = worn.map(s => `<div class="bh-cloth">
+        <span class="bh-cloth-slot">${esc(s.name)}</span>
+        <span class="bh-cloth-item">${esc(clothes[s.id].item)}${clothes[s.id].desc ? ` <small>— ${esc(clothes[s.id].desc)}</small>` : ''}${slotWearable(s, missing) ? '' : ' <small title="That part is missing, so this is left out of the note">(missing part)</small>'}</span>
+        <span class="fa-solid fa-pen bh-iconbtn" data-act="wear-edit" data-slot="${s.id}" title="Edit"></span>
+        <span class="fa-solid fa-trash-can bh-iconbtn" data-act="wear-remove" data-slot="${s.id}" title="Take off"></span>
+    </div>`).join('');
+    const m = selectedMember();
+    const own = outfitList('own', false);
+    const lib = outfitList('lib', false);
+    const optsHtml = (list, which) => list.map((o, i) => `<option value="${which}:${i}">${esc(o.name)}</option>`).join('');
+    const picker = own.length || lib.length
+        ? `<select id="bh_outfit" class="text_pole"><option value="">— outfit —</option>
+            ${own.length ? `<optgroup label="${esc(m?.name || '')}'s outfits">${optsHtml(own, 'own')}</optgroup>` : ''}
+            ${lib.length ? `<optgroup label="Shared library">${optsHtml(lib, 'lib')}</optgroup>` : ''}
+           </select>
+           <div class="menu_button bh-small" data-act="outfit-wear" title="Put this outfit on (replaces what's worn)">Wear</div>
+           <div class="fa-solid fa-trash-can bh-iconbtn" data-act="outfit-delete" title="Delete this saved outfit"></div>`
+        : '<span class="bh-cond-meta">No saved outfits yet.</span>';
+    return `<details class="bh-clothing bh-section" ${opts.getSettings().clothesOpen ? 'open' : ''}>
+        <summary class="bh-section-title">Clothing${worn.length ? ` (${worn.length})` : ''}</summary>
+        ${rows || '<div class="bh-empty">Nothing recorded.</div>'}
+        <div class="bh-outfits">${picker}</div>
+        <div class="bh-actions">
+            <div class="menu_button bh-small" data-act="wear-new"><i class="fa-solid fa-plus"></i> Item</div>
+            <div class="menu_button bh-small" data-act="outfit-save-form" title="Save what's worn now as a named outfit">Save as outfit</div>
+            ${worn.length ? '<div class="menu_button bh-small" data-act="outfit-clear" title="Remove every item">Take all off</div>' : ''}
+        </div>
+    </details>`;
+}
+
+function renderWearForm(body) {
+    const cur = form.slot ? body.clothes?.[form.slot] : null;
+    const slotId = form.slot || SLOTS.find(s => !body.clothes?.[s.id])?.id || SLOTS[0].id;
+    const slot = SLOTS.find(s => s.id === slotId);
+    return `<div class="bh-form">
+        <div class="bh-section-title">${cur ? 'Edit item' : 'Add an item'}</div>
+        <label>Slot <select id="bh_w_slot" class="text_pole">${SLOTS.map(s => `<option value="${s.id}" ${s.id === slotId ? 'selected' : ''}>${esc(s.name)}${body.clothes?.[s.id] && s.id !== form.slot ? ' (replaces what\'s there)' : ''}</option>`).join('')}</select></label>
+        <label>Item <input id="bh_w_item" class="text_pole" list="bh_w_items" value="${esc(cur?.item || '')}" placeholder="e.g. ${esc(slot.examples[0])}"></label>
+        <datalist id="bh_w_items">${slot.examples.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+        <label>Description (optional) <input id="bh_w_desc" class="text_pole" value="${esc(cur?.desc || '')}" placeholder="e.g. Black leather, worn at the heels"></label>
+        <div class="bh-actions">
+            <div class="menu_button" data-act="wear-save">Save</div>
+            <div class="menu_button" data-act="cancel">Cancel</div>
+        </div>
+    </div>`;
+}
+
+function renderOutfitSaveForm() {
+    const npc = selectedMember()?.npc;
+    return `<div class="bh-form">
+        <div class="bh-section-title">Save as outfit</div>
+        <label>Name <input id="bh_o_name" class="text_pole" placeholder="e.g. Travelling clothes"></label>
+        <label class="checkbox_label"><input id="bh_o_shared" type="checkbox" ${npc ? 'checked disabled' : ''}> <span>Put it in the shared library (any character can wear it)</span></label>
+        <div class="bh-actions">
+            <div class="menu_button" data-act="outfit-save">Save</div>
+            <div class="menu_button" data-act="cancel">Cancel</div>
+        </div>
+    </div>`;
+}
+
+// "😊 Mood: happy", click for the picker.
+function renderMood(body) {
+    const m = body.mood;
+    if (!m) return '<div class="bh-mood bh-chip-muted" data-act="mood" title="No particular mood. Click to set one.">😐 Mood: calm</div>';
+    return `<div class="bh-mood" data-act="mood" title="Click to change">${MOOD_EMOJI[m.label] || ''} Mood: ${esc(moodWord(m.label))}${m.intensity === 'strong' ? ' <b>(strong)</b>' : ''}</div>`;
+}
+
+function renderMoodForm(body) {
+    const current = body.mood?.label || 'neutral';
+    const grid = MOODS.map(label => `<div class="menu_button bh-mood-opt ${label === current ? 'bh-active' : ''}" data-act="mood-set" data-mood="${label}" title="${esc(moodWord(label))}">${MOOD_EMOJI[label] || ''} ${esc(label === 'neutral' ? 'calm (none)' : label)}</div>`).join('');
+    const int = ['mild', 'strong'].map(i => `<div class="menu_button bh-small bh-sub bh-mood-int ${form.intensity === i ? 'bh-active' : ''}" data-act="mood-intensity" data-intensity="${i}">${cap(i)}</div>`).join('');
+    return `<div class="bh-form">
+        <div class="bh-section-title">Mood</div>
+        <div class="bh-subs">${int}</div>
+        <div class="bh-mood-grid">${grid}</div>
+        <div class="bh-cond-meta">The AI is told about strong moods, and mild ones that change behaviour (fear, anger, grief…).</div>
+        <div class="bh-actions"><div class="menu_button" data-act="cancel">Cancel</div></div>
+    </div>`;
 }
 
 // Quick picker: one button per level, with what it means.

@@ -788,3 +788,73 @@
     width: auto;
     white-space: nowrap;
 }
+
+/* ---------- mood ---------- */
+
+.bh-mood {
+    cursor: pointer;
+    font-size: 0.9em;
+    margin-top: 6px;
+}
+
+.bh-mood-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr));
+    gap: 3px;
+}
+
+.bh-mood-grid .bh-mood-opt {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 3px 5px;
+    font-size: 0.85em;
+    justify-content: flex-start;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#body_hud_panel .bh-mood-grid .bh-mood-opt.bh-active {
+    outline: 2px solid var(--SmartThemeQuoteColor);
+}
+
+/* ---------- clothing ---------- */
+
+.bh-clothing summary {
+    cursor: pointer;
+}
+
+.bh-cloth {
+    display: grid;
+    grid-template-columns: 7.5em 1fr auto auto;
+    gap: 6px;
+    align-items: baseline;
+    font-size: 0.9em;
+    padding: 2px 0;
+}
+
+.bh-cloth-slot {
+    opacity: 0.75;
+}
+
+.bh-cloth-item small {
+    opacity: 0.75;
+}
+
+.bh-outfits {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.bh-outfits select {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+}
+
+.bh-outfits .menu_button {
+    margin: 0;
+}

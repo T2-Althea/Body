@@ -46,6 +46,8 @@ function taskReply(all) {
     if (text.includes('fever')) changes.push({ action: 'temperature', character: who, celsius: 38.9 });
     if (text.includes('eats the bread')) changes.push({ action: 'meter', character: who, meter: 'hunger', level: 'Fed' });
     if (text.includes('casts a spell')) changes.push({ action: 'meter', character: who, meter: 'mana', level: 'the ring' });
+    if (text.includes('puts on a red cloak')) changes.push({ action: 'wear', character: who, slot: 'outerwear', item: 'Red cloak', description: 'Wool' });
+    if (text.includes('laughs') && all.includes('"action": "mood"')) changes.push({ action: 'mood', character: who, mood: 'amusement', intensity: 'strong' });
     if (text.includes('three days later')) changes.push({ action: 'time_passes', days: 3 });
     if (text.includes('guard') && text.includes('face')) changes.push({ action: 'add', character: 'the guard', kind: 'injury', part: 'nose', type: 'Broken nose', severity: 'moderate', bleeding: 'light' });
     return 'Here you go:\n' + JSON.stringify({ changes });

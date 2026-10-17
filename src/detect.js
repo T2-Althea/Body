@@ -5,6 +5,8 @@
 import { BLEEDING, BODY_PART, BODY_STATES, INTENSITY_LABELS, KINDS, MIND_PART, PAIN_LEVELS, SEVERITIES, STATUSES, newId, npcKey } from './model.js';
 import { formatDuration } from './timeskip.js';
 import { meterStateText, resolveLevel } from './meters.js';
+import { MOODS, normalizeMood } from './mood.js';
+import { SLOTS } from './clothing.js';
 
 export const DETECT_TAG = '[BODY_HUD_TASK:detect]';
 export const FILL_TAG = '[BODY_HUD_TASK:fill]';
@@ -25,13 +27,22 @@ const TRIGGER = new RegExp([
     // Meters: eating, drinking, sleeping, exertion, magic.
     'eat', 'ate\\b', 'meal', 'food', 'drink', 'drank', 'sip', 'sleep', 'slept', 'asleep', 'nap\\b', 'rested', 'resting',
     'ran\\b', 'running', 'sprint', 'fight', 'fought', 'spell', 'cast(?!le)', 'mana\\b', 'yawn',
+    // Clothing.
+    'wear', 'wore', 'dress', 'undress', 'strip', 'cloth', 'shirt', 'blouse', 'coat', 'cloak', 'jacket', 'boot', 'shoe',
+    'glove', 'hat\\b', 'hood', 'armor', 'armour', 'skirt', 'trouser', 'pants', 'robe', 'put on', 'took off', 'take off', 'slip(s|ped)? (on|off|into)',
     // Time skips.
     '(hours|days|weeks|months|years|a day|a week|a month|a year) (later|passed|pass|went by|go by)',
     'the next (morning|day|evening|week)', 'time passe', 'after (a|an|two|three|several|many|a few) (hours|days|weeks|months)',
 ].map(w => `\\b${w}`).join('|'), 'i');
 
-export function mightMatter(text) {
-    return TRIGGER.test(String(text ?? ''));
+// Emotion words, used only when detection also reports moods.
+const MOOD_TRIGGER = new RegExp(['angr', 'furious', 'rage', 'afraid', 'scared', 'fear', 'cry', 'cried', 'tears', 'sob', 'laugh',
+    'smil', 'grin', 'blush', 'sigh', 'glare', 'frown', 'scowl', 'happy', 'sad\\b', 'joy', 'nervous', 'anxious', 'relie',
+    'surpris', 'shock', 'disgust', 'embarrass', 'proud', 'love', 'hate', 'worr', 'excit', 'gasp', 'giggl', 'pout'].map(w => `\\b${w}`).join('|'), 'i');
+
+export function mightMatter(text, { mood = false } = {}) {
+    const s = String(text ?? '');
+    return TRIGGER.test(s) || (mood && MOOD_TRIGGER.test(s));
 }
 
 /**
@@ -83,7 +94,7 @@ function describeCondition(c, partName) {
  * @param {{ members, bodies, index, message: { name, text }, previous?: { name, text }, meters?: { defs, enabled: (key) => string[] } }} input
  * @returns {{ system: string, user: string, ids: ReturnType<typeof shortIds> }}
  */
-export function buildDetectPrompt({ members, bodies, index, message, previous, meters = null }) {
+export function buildDetectPrompt({ members, bodies, index, message, previous, meters = null, mood = false, clothes = false }) {
     const partName = id => index.parts.get(id)?.name || id;
     const ids = shortIds(members, bodies);
     const state = members.map(m => {
@@ -92,6 +103,10 @@ export function buildDetectPrompt({ members, bodies, index, message, previous, m
         if (body?.temp != null) conds.push(`  temperature ${body.temp} °C`);
         const meterText = meters ? meterStateText(meters.defs, meters.enabled(m.key), body) : '';
         if (meterText) conds.push(`  meters: ${meterText}`);
+        if (clothes && body?.clothes && Object.keys(body.clothes).length) {
+            conds.push(`  wearing: ${SLOTS.filter(s => body.clothes[s.id]).map(s => `${s.id}=${body.clothes[s.id].item}`).join('; ')}`);
+        }
+        if (mood) conds.push(`  mood: ${body?.mood ? `${body.mood.label}${body.mood.intensity === 'strong' ? ' (strong)' : ''}` : 'neutral'}`);
         return `${m.name}${m.isUser ? ' (the user)' : ''}:\n${conds.length ? conds.join('\n') : '  (nothing)'}`;
     }).join('\n');
 
@@ -108,6 +123,8 @@ Rules:
 - If the message explicitly skips time ("three days later", "after a week of rest"), add one {"action": "time_passes", "days": <number>}; hours are fractions of a day. Don't report healing yourself for a time skip.
 - Forcing a physical feat past one's limits costs an injury (torn muscle, cracked bone…): add it.
 ${meters?.defs.length ? `- Meters (listed per character) change only when the message shows it: eating or drinking, sleeping or resting, running or fighting (stamina), casting (mana). Use the level names given below; move one or two levels at a time unless the text says more.
+` : ''}${clothes ? `- Clothing: report putting on, taking off or changing clothes and accessories with "wear" (one change per slot; "item": "" when taken off). Slots: ${SLOTS.map(s => s.id).join(', ')}.
+` : ''}${mood ? `- Mood: if the message clearly shows a character's emotion changing, add one "mood" change for them (label from: ${MOODS.join(', ')}; "strong" only for intense emotion). Skip it if the mood is the same.
 ` : ''}- Most messages change nothing. Then return {"changes": []}.
 
 Reply with JSON only:
@@ -115,7 +132,7 @@ Reply with JSON only:
  {"action": "add", "character": "<name>", "kind": "injury|missing|state|effect|natural|mind_lasting|mind_current|mark", "part": "<part id>", "type": "<what, e.g. Arrow wound>", "severity": "minor|moderate|severe|critical", "bleeding": "none|light|moderate|heavy", "status": "fresh|treated|healing|scarred|permanent", "pain": "none|mild|moderate|severe|agonizing", "details": "", "effect": "", "cause": "", "hidden": false},
  {"action": "update", "character": "<name>", "id": "<c1…>", "changes": {"status": "treated", "bleeding": "none"}},
  {"action": "remove", "character": "<name>", "id": "<c1…>"},
- {"action": "temperature", "character": "<name>", "celsius": 38.5},${meters?.defs.length ? '\n {"action": "meter", "character": "<name>", "meter": "<meter id>", "level": "<level name>"},' : ''}
+ {"action": "temperature", "character": "<name>", "celsius": 38.5},${clothes ? '\n {"action": "wear", "character": "<name>", "slot": "<slot>", "item": "<item, or empty>", "description": ""},' : ''}${mood ? '\n {"action": "mood", "character": "<name>", "mood": "<label>", "intensity": "mild|strong"},' : ''}${meters?.defs.length ? '\n {"action": "meter", "character": "<name>", "meter": "<meter id>", "level": "<level name>"},' : ''}
  {"action": "time_passes", "days": 3}
 ]}
 kind "mark" = tattoos, body paint, brands (status "permanent" or "temporary"); kind "injury" = anything else on a body part; "state" = whole-body states (${BODY_STATES.join(', ').toLowerCase()}…), part optional; "effect" = poison, drugs, medicine and its side effects, magic enhancements or curses (severity = intensity), no part; "natural" = period, pregnancy, heat and similar natural body states, no part; mind kinds need no part. "pain" is optional.
@@ -236,6 +253,21 @@ export function parseDetection(json, { members, index, ids, allowNpcs = true, me
             if (!Object.keys(changes).length) { skipped.push('update without changes'); continue; }
             const what = Object.entries(changes).map(([k, v]) => `${k} → ${v}`).join(', ');
             out.push({ pid: newId(), who: m.key, op: { t: 'edit', who: m.key, id: ref.id, changes }, summary: `${m.name}: ${what}` });
+        } else if (action === 'wear') {
+            const s = str(ch.slot).toLowerCase();
+            const slot = SLOTS.find(x => x.id === s || x.name.toLowerCase() === s);
+            if (!slot) { skipped.push(`unknown slot "${str(ch.slot)}"`); continue; }
+            const item = str(ch.item);
+            out.push({
+                pid: newId(), who: m.key, ...(npc ? { npc } : {}),
+                op: { t: 'wear', who: m.key, slot: slot.id, item, desc: str(ch.description) },
+                summary: `${npc ? 'New NPC ' : ''}${m.name}: ${item ? `wears ${item}` : 'takes off'} (${slot.name.toLowerCase()})`,
+            });
+        } else if (action === 'mood') {
+            const label = normalizeMood(ch.mood);
+            if (!label) { skipped.push(`unknown mood "${str(ch.mood)}"`); continue; }
+            const intensity = str(ch.intensity).toLowerCase() === 'strong' ? 'strong' : 'mild';
+            out.push({ pid: newId(), who: m.key, op: { t: 'mood', who: m.key, label, intensity }, summary: `${m.name}: mood → ${label}${intensity === 'strong' ? ' (strong)' : ''}` });
         } else if (action === 'meter') {
             const def = meters?.defs.find(d => d.id === str(ch.meter).toLowerCase() || d.name.toLowerCase() === str(ch.meter).toLowerCase());
             if (!def || !meters.enabled(m.key).includes(def.id)) { skipped.push(`meter "${str(ch.meter)}" not used by ${m.name}`); continue; }

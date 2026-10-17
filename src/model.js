@@ -155,6 +155,25 @@ export function applyOp(bodies, op, messageIndex) {
         case 'temp':
             body.temp = typeof op.value === 'number' && isFinite(op.value) ? op.value : null;
             break;
+        // Mood: one current emotion (Expressions labels); neutral or empty clears it.
+        case 'mood':
+            body.mood = op.label && op.label !== 'neutral' ? { label: op.label, intensity: op.intensity === 'strong' ? 'strong' : 'mild' } : null;
+            break;
+        // Clothing: one slot, or a whole outfit replacing everything.
+        case 'wear': {
+            if (!op.slot) break;
+            const clothes = { ...(body.clothes || {}) };
+            const item = String(op.item ?? '').trim();
+            if (item) clothes[op.slot] = { item, desc: String(op.desc ?? '').trim() };
+            else delete clothes[op.slot];
+            body.clothes = clothes;
+            body.clothesAt = messageIndex;
+            break;
+        }
+        case 'outfit':
+            body.clothes = structuredClone(op.items || {});
+            body.clothesAt = messageIndex;
+            break;
         // Meters (hunger, mana…): a level index, 0 = comfortable.
         case 'meter':
             if (op.id && Number.isInteger(op.level) && op.level >= 0) body.meters = { ...(body.meters || {}), [op.id]: op.level };

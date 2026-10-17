@@ -7,8 +7,10 @@
 // - hidden conditions are marked so others don't notice them;
 // - a hard token budget, cutting the least important lines first.
 
-import { BODY_PART, INTENSITY_LABELS, severityRank } from './model.js';
+import { BODY_PART, INTENSITY_LABELS, missingParts, severityRank } from './model.js';
 import { meterNoteLines } from './meters.js';
+import { moodNoteLine } from './mood.js';
+import { clothesNoteLine } from './clothing.js';
 
 export const NOTE_HEADER = '[Body status — in effect right now]';
 
@@ -133,6 +135,10 @@ export function buildNote(members, bodies, index, opts, countTokens) {
         }
         const wb = wholeBodyLine(states, body.temp, opts, partName);
         if (wb) candidates.push({ mi, ...wb });
+        const clothes = clothesNoteLine(body, { mode: opts.clothesInNote || 'recent', chatLength: opts.chatLength ?? 0, missing: missingParts(body, index) });
+        if (clothes) candidates.push({ mi, ...clothes });
+        const mood = opts.moodInNote === false ? null : moodNoteLine(body.mood);
+        if (mood) candidates.push({ mi, ...mood });
         if (opts.meters) {
             for (const line of meterNoteLines(opts.meters.defs, opts.meters.enabled(m.key), body)) candidates.push({ mi, ...line });
         }

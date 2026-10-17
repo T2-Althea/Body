@@ -84,6 +84,16 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
         them into addons format; index.js `rebuildTemplate()` after saving.
 
 ## Extras (user requests, after M7)
+- **Mood: DONE.** `src/mood.js` (pure): the 28 Expressions labels, `moodWord`,
+  `moodNoteLine` (strong moods, or mild ones in RELEVANT: fear, anger, grief…).
+  Op `{t:'mood', who, label, intensity: mild|strong}` → `body.mood` (neutral
+  clears). Panel: "Mood:" line under the meters → picker (Mild/Strong + labels).
+  `settings.moodSource`: manual | expressions (runner `watchExpression` polls
+  `/expression-last <name>` for up to 45 s after a character reply and writes a
+  detected op on that reply; Expressions with no classifier clears the
+  expression right after a reply) | detect (detection prompt gets mood + action
+  `mood`; mood proposals are applied without review; prefilter adds emotion
+  words). `settings.moodInNote`. Original request:
 - **Emotions / mood:** a Mood line per character with a quick picker (builds on
   "Mind: current state"). Auto source options: read SillyTavern's Expressions
   extension (28 labels; `/expression-last` returns a character's last one) or
@@ -120,6 +130,19 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
     codex forbids figures in fiction, so the note uses words, never percentages.
   Moved by: manual, M4 detection (eating, casting, fighting, sleeping), and M6
   time skips (recovery/drift by realism level).
+- **Clothing: DONE.** `src/clothing.js` (pure): SLOTS (id, name, part, examples;
+  `-part` = left/right pair), `cleanItems`, `slotWearable` (slot's part fully
+  missing → left out of the note), `clothesNoteLine` (prio 8; settings
+  `clothesInNote`: recent = 10 messages after `body.clothesAt` | always | off).
+  Ops `{t:'wear', who, slot, item, desc}` (empty item = take off) and
+  `{t:'outfit', who, items}` (replaces all). Outfits: own in
+  `profiles[key].outfits`, shared in `settings.outfitLibrary` (NPCs: library only).
+  Panel: collapsible Clothing section (`settings.clothesOpen`), item form, outfit
+  picker / Wear / Save as outfit / Take all off. Detection: "wearing:" state and
+  action `wear` (`settings.detectClothes`), reviewed like other proposals.
+  Not done yet: wet clothing → wet state, armor covering regions.
+  e2e for mood + clothing: `dev/e2e-extras.cjs`; unit: `tests/extras.test.mjs`.
+  Original request:
 - **Clothing & accessories (no visuals):** slots per character (head, ears,
   face/piercings, neck, top, outerwear, arms, wrists, hands, fingers, underwear,
   pants, legwear, leg accessories, shoes), item + short description; slots can

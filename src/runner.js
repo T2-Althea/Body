@@ -4,6 +4,7 @@
 import { buildDetectPrompt, buildFillPrompt, mightMatter, parseDetection } from './detect.js';
 import { callModel, describeFailure, extractJson } from './llm.js';
 import { fingerprint } from './model.js';
+import { normalizeMood } from './mood.js';
 import { addPending, buildBodies, getSceneMembers, meterContext, pruneStale, writeDetectedOps } from './store.js';
 
 const ctx = () => SillyTavern.getContext();
@@ -41,11 +42,12 @@ export async function onNewMessage(index, type) {
     // message keeps data read from its old text: clear what no longer matches.
     if (msg && await pruneStale(msg)) opts.onChange?.();
     const s = opts.getSettings();
+    if (s.enabled && s.moodSource === 'expressions' && msg && !msg.is_user && !msg.is_system && type !== 'first_message') watchExpression(msg);
     if (!s.enabled || s.detectMode === 'off' || s.detectMode === 'manual') return;
     if (type === 'first_message') return;
     if (!msg || msg.is_system) return;
     if (msg.is_user && !s.detectUser) return;
-    if (s.detectPrefilter && !mightMatter(msg.mes)) return;
+    if (s.detectPrefilter && !mightMatter(msg.mes, { mood: s.moodSource === 'detect' })) return;
     enqueue(() => detect(msg, { manual: false }));
 }
 
@@ -85,6 +87,8 @@ async function detect(msg, { manual }) {
         message: { name: msg.name, text: msg.mes },
         previous: prev ? { name: prev.name, text: prev.mes } : null,
         meters,
+        mood: opts.getSettings().moodSource === 'detect',
+        clothes: opts.getSettings().detectClothes !== false,
     });
 
     setBusy(1);
@@ -108,10 +112,18 @@ async function detect(msg, { manual }) {
     // The message may have been deleted, edited or swiped while we waited.
     if (!c.chat.includes(msg) || fingerprint(msg.mes) !== fp || (msg.swipe_id ?? 0) !== swipe) return;
 
-    const { proposals, skipped } = parseDetection(json, { members, index, ids, allowNpcs: opts.getSettings().detectNpcs !== false, meters });
-    if (skipped.length) console.debug('[Body HUD] detection skipped:', skipped);
+    const parsed = parseDetection(json, { members, index, ids, allowNpcs: opts.getSettings().detectNpcs !== false, meters });
+    if (parsed.skipped.length) console.debug('[Body HUD] detection skipped:', parsed.skipped);
+    // Moods are applied straight away (undo in "Recent changes"); reviewing every
+    // flicker of emotion would be tedious.
+    const moods = parsed.proposals.filter(p => p.op.t === 'mood' && !p.npc);
+    const proposals = parsed.proposals.filter(p => !moods.includes(p));
+    if (moods.length) {
+        await writeDetectedOps(msg, moods.map(p => p.op), fp);
+        opts.onChange?.();
+    }
     if (!proposals.length) {
-        if (manual) toastr.info('Body HUD: no body changes found in that message.');
+        if (manual && !moods.length) toastr.info('Body HUD: no body changes found in that message.');
         return;
     }
 
@@ -130,6 +142,47 @@ async function detect(msg, { manual }) {
         await addPending(msg, proposals, fp);
         toastr.info(`${proposals.length} body change${proposals.length > 1 ? 's' : ''} to review. Click to open the HUD.`, 'Body HUD', { onclick: () => opts.openPanel() });
     }
+    opts.onChange?.();
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Mood from SillyTavern's Expressions extension. It classifies a reply a moment
+ * after it arrives and has no event for it, so ask `/expression-last` for a
+ * while. The result is stored on the reply like a detected change, so it
+ * follows swipes and edits.
+ */
+async function watchExpression(msg) {
+    const c = ctx();
+    const solo = c.characterId !== undefined ? c.characters[c.characterId]?.avatar : null;
+    const avatar = msg.original_avatar || solo;
+    if (!avatar) return;
+    const key = 'c:' + avatar;
+    const fp = fingerprint(msg.mes);
+    const swipe = msg.swipe_id ?? 0;
+    const read = async () => {
+        try {
+            const r = await c.executeSlashCommandsWithOptions(`/expression-last ${JSON.stringify(msg.name)}`, { handleParserErrors: false, handleExecutionErrors: false });
+            return normalizeMood(r?.pipe);
+        } catch {
+            return null; // Expressions extension turned off
+        }
+    };
+    const before = await read();
+    let label = before;
+    // An LLM classifier (especially a reasoning model) can take a while.
+    for (let i = 0; i < 45; i++) {
+        await sleep(1000);
+        if (!c.chat.includes(msg) || fingerprint(msg.mes) !== fp || (msg.swipe_id ?? 0) !== swipe) return;
+        const now = await read();
+        if (now) label = now;
+        if (now && now !== before) break;
+    }
+    console.debug('[Body HUD] expression for', msg.name, 'before:', before, 'now:', label);
+    if (!label) return;
+    if ((buildBodies().get(key)?.mood?.label || 'neutral') === label) return;
+    await writeDetectedOps(msg, [{ t: 'mood', who: key, label, intensity: 'mild' }], fp);
     opts.onChange?.();
 }
 
