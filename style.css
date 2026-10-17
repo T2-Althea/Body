@@ -680,3 +680,17 @@
     font-family: monospace;
     font-size: 0.85em;
 }
+
+.bh-chip-muted {
+    opacity: 0.6;
+}
+
+.bh-chip-x {
+    margin-left: 6px;
+    opacity: 0.6;
+    cursor: pointer;
+}
+
+.bh-chip-x:hover {
+    opacity: 1;
+}

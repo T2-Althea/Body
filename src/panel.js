@@ -7,6 +7,7 @@ import {
 } from './model.js';
 import { withSide } from './detect.js';
 import { describeFailure } from './llm.js';
+import { tempLabel } from './note.js';
 import { renderMannequin } from './mannequin.js';
 import { isBusy, scanLatest, suggestFields } from './runner.js';
 import { UNITS, daysLeft, daysToNextStage, formatDuration, planTimeSkip } from './timeskip.js';
@@ -220,12 +221,13 @@ export function render() {
     const marks = conds.filter(c => c.kind === 'mark');
 
     html += '<div class="bh-section"><div class="bh-chips">';
-    if (body.temp !== null) {
-        html += `<span class="bh-chip" data-act="temp" title="Body temperature">🌡 ${toUnit(body.temp)} ${unitLabel()}</span>`;
-    }
+    // Temperature is always shown; unset means normal.
+    html += body.temp !== null
+        ? `<span class="bh-chip bh-temp" data-act="temp" title="Body temperature (click to change)">🌡 ${toUnit(body.temp)} ${unitLabel()} · ${tempLabel(body.temp)}</span>`
+        : `<span class="bh-chip bh-temp bh-chip-muted" data-act="temp" title="Normal (not set). Click to set it.">🌡 ${toUnit(37)} ${unitLabel()} · normal</span>`;
     for (const c of states) {
         const area = c.part && c.part !== BODY_PART ? ` · ${partName(index, c.part)}` : '';
-        html += `<span class="bh-chip bh-sev-${esc(c.severity)}" data-act="edit" data-id="${esc(c.id)}" title="${esc(c.effect || '')}">${esc(c.type)}${esc(area)}${c.hidden ? ' 🙈' : ''}</span>`;
+        html += `<span class="bh-chip bh-sev-${esc(c.severity)}" data-act="edit" data-id="${esc(c.id)}" title="${esc(c.effect || 'Click to edit')}">${esc(c.type)}${esc(area)}${c.hidden ? ' 🙈' : ''}<span class="fa-solid fa-xmark bh-chip-x" data-act="remove" data-id="${esc(c.id)}" title="Remove"></span></span>`;
     }
     html += '</div></div>';
 
@@ -264,7 +266,6 @@ export function render() {
         : '';
     html += `<div class="bh-actions">
         <div class="menu_button" data-act="add"><i class="fa-solid fa-plus"></i> Condition</div>
-        <div class="menu_button" data-act="temp"><i class="fa-solid fa-temperature-half"></i> Temperature</div>
         <div class="menu_button" data-act="skip" title="Let time pass: wounds heal, states wear off"><i class="fa-solid fa-hourglass-half"></i> Time passes</div>
         ${scan}
     </div>`;
@@ -606,6 +607,7 @@ function renderForm(body, index) {
         <div class="bh-actions">
             <div class="menu_button" data-act="save">${form.mode === 'review' ? 'Apply' : 'Save'}</div>
             <div class="menu_button" data-act="cancel">Cancel</div>
+            ${form.mode === 'edit' ? `<div class="menu_button" data-act="remove" data-id="${esc(form.id)}" title="Remove this condition"><i class="fa-solid fa-trash-can"></i> Remove</div>` : ''}
             <div class="menu_button" data-act="fill" data-field="" title="Suggest every empty field (What included) from the recent story"><i class="fa-solid fa-wand-magic-sparkles"></i> Fill empty</div>
         </div>
     </div>`;

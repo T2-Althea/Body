@@ -76,7 +76,7 @@ const { check, finish } = makeChecker();
     await page.fill('#bh_f_type', 'Panicked');
     await page.click('[data-act="save"]');
 
-    await page.click('.bh-actions [data-act="temp"]');
+    await page.click('.bh-chip[data-act="temp"]');
     await page.fill('#bh_f_temp', '35.8');
     await page.click('[data-act="save-temp"]');
     await page.waitForTimeout(300);

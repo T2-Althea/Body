@@ -139,6 +139,9 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
   "Fill empty" includes What and pain. `buildFillPrompt` asks only for the
   requested fields; the fake backend answers only those.
 - e2e: `dev/e2e-form.cjs`; unit: `tests/conditions.test.mjs`.
+- Temperature chip is always shown (unset = "normal", muted; click to set); the
+  Temperature button is gone. Meters should sit next to it. Whole-body chips have
+  a × (remove) and the edit form has a Remove button.
 
 ## How we work (user's workflow)
 - The user plays on their own SillyTavern; this repo is installed there from the

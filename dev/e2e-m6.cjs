@@ -59,7 +59,7 @@ const { check, finish } = makeChecker();
     await addCond({ part: 'left_thigh', type: 'Arrow wound', sev: 'moderate', status: 'treated', effect: "Can't run" });
     await addCond({ kind: 'state', type: 'Wet', sev: 'minor' });
     await addCond({ kind: 'mind_current', type: 'Panicked' });
-    await page.click('.bh-actions [data-act="temp"]');
+    await page.click('.bh-chip[data-act="temp"]');
     await page.fill('#bh_f_temp', '35.5');
     await page.click('[data-act="save-temp"]');
     await page.waitForTimeout(250);

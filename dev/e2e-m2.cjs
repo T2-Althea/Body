@@ -75,7 +75,7 @@ const noteIndex = msgs => msgs.findIndex(m => String(m.content).startsWith(HEADE
     check('regenerated reply also gets the note', noteCount(lastMessages()) === 1);
 
     // Hidden flag, temperature, user's body.
-    await page.click('.bh-actions [data-act="temp"]');
+    await page.click('.bh-chip[data-act="temp"]');
     await page.fill('#bh_f_temp', '35.2');
     await page.click('[data-act="save-temp"]');
     await page.locator('.bh-member', { hasText: 'User' }).click();
@@ -119,7 +119,7 @@ const noteIndex = msgs => msgs.findIndex(m => String(m.content).startsWith(HEADE
             await page.waitForTimeout(150);
         }
         if (await page.locator('.bh-chip[data-act="temp"]').count()) {
-            await page.click('.bh-actions [data-act="temp"]');
+            await page.click('.bh-chip[data-act="temp"]');
             await page.click('[data-act="clear-temp"]');
         }
     }

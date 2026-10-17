@@ -192,6 +192,17 @@ const { check, finish } = makeChecker();
     await save();
     check('saving it keeps it a state', (await lastKinds()).includes('Muddy:state'));
 
+    // Temperature always visible; whole-body chips and the edit form can remove.
+    check('temperature always shown, "normal" when not set', /🌡 .* · normal/.test(await page.locator('.bh-chip.bh-temp').innerText()));
+    await page.screenshot({ path: path.join(shots, 'form-chips.png'), clip: await page.locator('.bh-chips').boundingBox() });
+    await page.click('.bh-chip:has-text("Muddy") .bh-chip-x');
+    await page.waitForTimeout(300);
+    check('× on a whole-body chip removes it', !(await panelText()).includes('Muddy'));
+    await page.click('[data-act="edit"][data-id="old1"]');
+    await page.click('.bh-form [data-act="remove"]');
+    await page.waitForTimeout(300);
+    check('Remove button in the edit form', !(await panelText()).includes('Fear of fire') && !(await page.locator('.bh-form').count()));
+
     // 8. Reply countdown follows the chat.
     await sendMessage(page, reqLog, 'We walk on in silence.');
     check('one of her replies counted', (await panelText()).includes('ends in 1 reply from Seraphina'));
