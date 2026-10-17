@@ -79,7 +79,11 @@ export function applyOp(bodies, op, messageIndex) {
             break;
         case 'edit': {
             const c = body.conditions.get(op.id);
-            if (c) body.conditions.set(op.id, { ...c, ...op.changes, id: c.id, since: c.since });
+            if (!c) break;
+            const next = { ...c, ...op.changes, id: c.id, since: c.since };
+            // Healing progress counts days in the current stage; a new stage starts at zero.
+            if (op.changes.status && op.changes.status !== c.status && !('progress' in op.changes)) next.progress = 0;
+            body.conditions.set(op.id, next);
             break;
         }
         case 'remove':

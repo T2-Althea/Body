@@ -54,7 +54,7 @@ const noteIndex = msgs => msgs.findIndex(m => String(m.content).startsWith(HEADE
     await page.click('[data-act="save"]');
     await page.waitForTimeout(300);
     const preview = await page.locator('.bh-note-text').innerText();
-    check('preview shows the note', preview.includes(HEADER) && preview.includes("Left thigh: arrow wound, moderate, arrowhead still in, moderate bleeding. Can't run; limps."), preview);
+    check('preview shows the note', preview.includes(HEADER) && preview.includes("Left thigh: arrow wound, moderate, arrowhead still in, moderate bleeding, untreated. Can't run; limps."), preview);
 
     await send('Are you hurt?');
     let msgs = lastMessages();

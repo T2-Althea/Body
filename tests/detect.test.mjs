@@ -63,3 +63,12 @@ test('parseDetection maps actions to ops and flags unknown sides', () => {
     assert.equal(proposals[4].op.cond.part, '_body');
     assert.ok(skipped.some(s => s.includes('Guard')));
 });
+
+test('time skips', () => {
+    assert.equal(mightMatter('Three days later, they reach the city.'), true);
+    assert.equal(mightMatter('The next morning she wakes early.'), true);
+    const { proposals } = parseDetection({ changes: [{ action: 'time_passes', days: 3 }, { action: 'time_passes', days: -1 }] }, { members, index, ids: { toReal: new Map() } });
+    assert.equal(proposals.length, 1);
+    assert.deepEqual(proposals[0].op, { t: 'timeskip', days: 3 });
+    assert.equal(proposals[0].summary, 'Time passes: 3 days');
+});

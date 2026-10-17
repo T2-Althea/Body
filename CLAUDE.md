@@ -53,7 +53,14 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
       `regenerate` of an AI message) so a replacement reply doesn't see wounds the
       replaced one caused. Branches copy messages (and their extra) but not chat
       metadata, so the no-messages baseline in chatMetadata doesn't carry over.
-- [ ] M6 Time skips and realism levels.
+- [x] M6 Time skips and realism levels. `src/timeskip.js` (pure, unit-tested):
+      stage durations by severity × realism speed; untreated ×2 (not cinematic);
+      leftover days kept in `cond.progress` (reset by applyOp when status changes);
+      simulation festers untreated moderate+ wounds, adds blood loss and fever.
+      Panel "Time passes" form → preview with checkboxes → ops tagged `skip`/
+      `skipDays` (manual: src 'timeskip' on all swipes; from the story: the
+      detection `time_passes` proposal, written to its message as 'review').
+      `undoSkip` removes a whole skip. Grounded+ flags untreated bleeding in the note.
 - [ ] M7 Template editor and NPC bodies.
 
 ## Extras (user requests, after M7)

@@ -25,6 +25,7 @@ const defaultSettings = Object.freeze({
     budget: 200,      // tokens
     tempInNote: 'abnormal',
     notePreviewOpen: false,
+    realism: 'grounded',    // cinematic | grounded | simulation (time skips; untreated flag in the note)
     // Automatic detection.
     detectMode: 'ask',      // off | manual (button only) | ask (review first) | auto (apply, with undo)
     detectUser: true,       // also check the user's own messages
@@ -64,6 +65,7 @@ function computeNote({ skipDetectedAt = -1 } = {}) {
         budget: Number(s.budget) || 200,
         tempUnit: s.tempUnit,
         tempInNote: s.tempInNote,
+        realism: s.realism,
     }, estimateTokens);
 }
 
@@ -126,6 +128,14 @@ function renderSettings() {
                     <input type="checkbox" id="body_hud_sensitive" ${s.hideSensitive ? 'checked' : ''}>
                     <span>Hide sensitive parts from the part list</span>
                 </label>
+                <div class="bh-setting-row" title="How time skips treat wounds. Cinematic: fast, nothing worsens. Grounded: realistic healing, untreated bleeding is flagged to the AI. Simulation: untreated wounds can get infected and worse.">
+                    <span>Realism</span>
+                    <select id="body_hud_realism" class="text_pole">
+                        <option value="cinematic" ${sel('cinematic', s.realism)}>Cinematic</option>
+                        <option value="grounded" ${sel('grounded', s.realism)}>Grounded</option>
+                        <option value="simulation" ${sel('simulation', s.realism)}>Simulation</option>
+                    </select>
+                </div>
                 <hr>
                 <b>Note sent to the AI</b>
                 <label class="checkbox_label">
@@ -212,6 +222,7 @@ function renderSettings() {
     bind('#body_hud_unit', 'tempUnit', el => el.value);
     bind('#body_hud_sensitive', 'hideSensitive', el => el.checked);
     bind('#body_hud_mannequin', 'showMannequin', el => el.checked);
+    bind('#body_hud_realism', 'realism', el => el.value);
     bind('#body_hud_inject', 'inject', el => el.checked);
     bind('#body_hud_position', 'position', el => Number(el.value));
     bind('#body_hud_depth', 'depth', num(0, 50));

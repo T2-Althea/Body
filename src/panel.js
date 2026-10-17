@@ -9,8 +9,9 @@ import { withSide } from './detect.js';
 import { describeFailure } from './llm.js';
 import { renderMannequin } from './mannequin.js';
 import { isBusy, scanLatest, suggestFields } from './runner.js';
+import { UNITS, daysToNextStage, formatDuration, planTimeSkip } from './timeskip.js';
 import {
-    buildBodies, collectPending, getSceneMembers, hasOpenChat, recentDetected, resolvePending, undoOp, writeManualOps,
+    buildBodies, collectPending, getSceneMembers, hasOpenChat, recentDetected, resolvePending, undoOp, undoSkip, writeManualOps,
 } from './store.js';
 
 const INJURY_TYPES = [
@@ -66,7 +67,21 @@ export function initPanel(options) {
         .on('click', '.bh-member', function () { selected = $(this).attr('data-key'); form = null; zoom = null; render(); })
         .on('click', '.bh-m-region', function () { zoom = this.getAttribute('data-region'); render(); })
         .on('click', '[data-act]', onAction)
-        .on('change', '#bh_f_kind', () => updateFormFields());
+        .on('change', '#bh_f_kind', () => updateFormFields())
+        .on('change', '#bh_s_amount, #bh_s_unit, #bh_s_scope', () => {
+            if (form?.mode !== 'skip') return;
+            form.amount = $('#bh_s_amount').val();
+            form.unit = $('#bh_s_unit').val();
+            form.scope = $('#bh_s_scope').val();
+            // The preview no longer matches; drop it without re-rendering, so the
+            // click that caused this blur (often on Preview) still lands.
+            form.plan = null;
+            $('#body_hud_panel .bh-skip-preview, #body_hud_panel [data-act="skip-apply"]').remove();
+        })
+        .on('change', '.bh-skip-item input', function () {
+            const id = this.getAttribute('data-change');
+            if (this.checked) form.off.delete(id); else form.off.add(id);
+        });
     // 'toggle' doesn't bubble, so listen in the capture phase.
     document.getElementById('body_hud_panel').addEventListener('toggle', e => {
         if (!e.target.classList?.contains('bh-note')) return;
@@ -193,6 +208,7 @@ export function render() {
     html += `<div class="bh-actions">
         <div class="menu_button" data-act="add"><i class="fa-solid fa-plus"></i> Condition</div>
         <div class="menu_button" data-act="temp"><i class="fa-solid fa-temperature-half"></i> Temperature</div>
+        <div class="menu_button" data-act="skip" title="Let time pass: wounds heal, states wear off"><i class="fa-solid fa-hourglass-half"></i> Time passes</div>
         ${scan}
     </div>`;
     html += renderLog(members, index);
@@ -200,7 +216,7 @@ export function render() {
     html += renderNotePreview();
 
     content.html(html);
-    if (form && form.mode !== 'temp') updateFormFields();
+    if (form && form.mode !== 'temp' && form.mode !== 'skip') updateFormFields();
     if (form?.scroll) {
         form.scroll = false;
         content.find('.bh-form')[0]?.scrollIntoView({ block: 'nearest' });
@@ -253,7 +269,9 @@ function renderPending(members) {
     const name = key => members.find(m => m.key === key)?.name || key;
     const rows = pending.map(p => {
         const ref = `data-index="${p.index}" data-pid="${esc(p.pid)}"`;
-        const buttons = p.needsSide
+        const buttons = p.op.t === 'timeskip'
+            ? `<div class="menu_button bh-small" data-act="skip-from" ${ref} title="See what this time skip would change">Preview</div>`
+            : p.needsSide
             ? `<div class="menu_button bh-small" data-act="side" data-side="left" ${ref}>Left</div>
                <div class="menu_button bh-small" data-act="side" data-side="right" ${ref}>Right</div>`
             : `<div class="fa-solid fa-check bh-iconbtn" data-act="approve" ${ref} title="Apply"></div>
@@ -262,7 +280,7 @@ function renderPending(members) {
         return `<div class="bh-cond bh-pending">
             <div class="bh-cond-main">
                 <div>${esc(p.summary)}</div>${extra}
-                <div class="bh-cond-meta">from message #${p.index}${p.needsSide ? ' · which side?' : ''}${p.who !== selected ? ` · ${esc(name(p.who))}` : ''}</div>
+                <div class="bh-cond-meta">from message #${p.index}${p.needsSide ? ' · which side?' : ''}${p.who && p.who !== selected ? ` · ${esc(name(p.who))}` : ''}</div>
             </div>
             <div class="bh-cond-btns">${buttons}
                 <div class="fa-solid fa-xmark bh-iconbtn" data-act="reject" ${ref} title="Reject"></div>
@@ -293,11 +311,16 @@ function renderLog(members, index) {
             default: return op.t;
         }
     };
-    const rows = items.map(({ index: i, op }) => `<div class="bh-logrow">
-        <span>${esc(name(op.who))}: ${esc(describe(op))} <small>(#${i}${op.src === 'review' ? ', reviewed' : ''})</small></span>
-        <span class="fa-solid fa-rotate-left bh-iconbtn" data-act="undo" data-index="${i}" data-oid="${esc(op.oid)}" title="Undo"></span>
-    </div>`).join('');
-    return `<details class="bh-log bh-section"><summary class="bh-section-title">Recent automatic changes</summary>${rows}</details>`;
+    const rows = items.map(item => item.skip
+        ? `<div class="bh-logrow">
+            <span>Time skip: ${esc(formatDuration(item.days || 0))} (${item.ops.length} change${item.ops.length === 1 ? '' : 's'}) <small>(#${item.index})</small></span>
+            <span class="fa-solid fa-rotate-left bh-iconbtn" data-act="undo-skip" data-skip="${esc(item.skip)}" title="Undo the whole time skip"></span>
+        </div>`
+        : `<div class="bh-logrow">
+            <span>${esc(name(item.op.who))}: ${esc(describe(item.op))} <small>(#${item.index}${item.op.src === 'review' ? ', reviewed' : ''})</small></span>
+            <span class="fa-solid fa-rotate-left bh-iconbtn" data-act="undo" data-index="${item.index}" data-oid="${esc(item.op.oid)}" title="Undo"></span>
+        </div>`).join('');
+    return `<details class="bh-log bh-section"><summary class="bh-section-title">Recent changes</summary>${rows}</details>`;
 }
 
 // Exactly what will be sent before the next reply, for every body in the scene.
@@ -335,11 +358,20 @@ function partName(index, id) {
     return index.parts.get(id)?.name || id;
 }
 
+// "about 2 weeks until healed", from the time-skip rules.
+function healingHint(c) {
+    const d = daysToNextStage(c, opts.getSettings().realism);
+    if (d === null) return null;
+    const next = c.status === 'healing' ? 'until healed' : 'until it starts healing';
+    return `~${formatDuration(Math.max(d, 1 / 24))} ${next}`;
+}
+
 function condRow(c, index, note = '') {
     const meta = [
         c.kind === 'injury' || !c.kind ? cap(c.severity) : null,
         c.bleeding && c.bleeding !== 'none' ? `bleeding: ${c.bleeding}` : null,
         c.status ? cap(c.status) : null,
+        healingHint(c),
         c.kind === 'mind_current' ? 'current' : c.kind === 'mind_lasting' ? 'lasting' : null,
         c.since >= 0 ? `since #${c.since}` : 'before the chat',
         note || null,
@@ -366,7 +398,48 @@ function options(values, current, labels = null) {
     return values.map((v, i) => `<option value="${esc(v)}" ${v === current ? 'selected' : ''}>${esc(labels ? labels[i] : cap(v))}</option>`).join('');
 }
 
+function renderSkipForm(members) {
+    const s = opts.getSettings();
+    const sel = members.find(m => m.key === selected);
+    const unitOpts = Object.keys(UNITS).map(u => `<option value="${u}" ${u === form.unit ? 'selected' : ''}>${u}</option>`).join('');
+    let preview = '';
+    if (form.plan) {
+        const visible = form.plan.filter(x => x.group !== 'progress');
+        const progress = form.plan.filter(x => x.group === 'progress');
+        const groups = { worsen: 'Gets worse', heal: 'Healing', clear: 'Wears off' };
+        preview = visible.length || progress.length
+            ? Object.entries(groups).map(([g, title]) => {
+                const items = visible.filter(x => x.group === g);
+                if (!items.length) return '';
+                return `<div class="bh-region">${title}</div>` + items.map(x => `
+                    <label class="checkbox_label bh-skip-item"><input type="checkbox" data-change="${esc(x.id)}" ${form.off?.has(x.id) ? '' : 'checked'}> <span>${esc(x.summary)}</span></label>`).join('');
+            }).join('') + (progress.length ? `<div class="bh-cond-meta">${progress.length} other wound${progress.length > 1 ? 's' : ''} move${progress.length > 1 ? '' : 's'} closer to healing.</div>` : '')
+            : '<div class="bh-empty">Nothing would change in that time.</div>';
+        preview = `<div class="bh-skip-preview">${preview}</div>`;
+    }
+    return `<div class="bh-form">
+        <div class="bh-section-title">Time passes${form.origin ? ' (from the story)' : ''}</div>
+        <div class="bh-row">
+            <label>Amount <input id="bh_s_amount" class="text_pole" type="number" min="0.1" step="any" value="${esc(form.amount)}"></label>
+            <label>Unit <select id="bh_s_unit" class="text_pole">${unitOpts}</select></label>
+        </div>
+        <label>Who <select id="bh_s_scope" class="text_pole">
+            <option value="all" ${form.scope === 'all' ? 'selected' : ''}>Everyone in the scene</option>
+            <option value="one" ${form.scope === 'one' ? 'selected' : ''}>Only ${esc(sel?.name || 'this character')}</option>
+        </select></label>
+        <div class="bh-cond-meta">Realism: ${esc(cap(s.realism))} (change it in the extension settings)</div>
+        ${preview}
+        <div class="bh-actions">
+            <div class="menu_button" data-act="skip-preview">${form.plan ? 'Update preview' : 'Preview'}</div>
+            ${form.plan && form.plan.length ? '<div class="menu_button" data-act="skip-apply">Apply</div>' : ''}
+            ${form.plan && !form.plan.length && form.origin ? '<div class="menu_button" data-act="skip-dismiss" title="Nothing to change: mark this story time skip as handled">OK</div>' : ''}
+            <div class="menu_button" data-act="cancel">Cancel</div>
+        </div>
+    </div>`;
+}
+
 function renderForm(body, index) {
+    if (form.mode === 'skip') return renderSkipForm(getSceneMembers());
     if (form.mode === 'temp') {
         const v = body.temp === null ? '' : toUnit(body.temp);
         return `<div class="bh-form">
@@ -491,7 +564,7 @@ async function onAction(e) {
         case 'reject-all':
             await afterStore((async () => {
                 for (const p of collectPending()) {
-                    if (act === 'approve-all' && p.needsSide) continue;
+                    if (act === 'approve-all' && (p.needsSide || p.op.t === 'timeskip')) continue;
                     await resolvePending(p.index, p.pid, act === 'approve-all' ? p.op : null);
                 }
             })());
@@ -505,6 +578,44 @@ async function onAction(e) {
             return;
         }
         case 'undo': await afterStore(undoOp(pIndex, $(this).attr('data-oid'))); return;
+        case 'undo-skip': await afterStore(undoSkip($(this).attr('data-skip'))); return;
+        case 'skip':
+            form = { mode: 'skip', amount: 1, unit: 'days', scope: 'all', plan: null, off: new Set(), scroll: true };
+            render();
+            return;
+        case 'skip-from': {
+            const p = findPending();
+            if (!p) return;
+            form = { mode: 'skip', amount: p.op.days, unit: 'days', scope: 'all', plan: null, off: new Set(), origin: { index: p.index, pid: p.pid }, scroll: true };
+            form.plan = planSkip();
+            render();
+            return;
+        }
+        case 'skip-preview':
+            form.amount = $('#bh_s_amount').val();
+            form.unit = $('#bh_s_unit').val();
+            form.scope = $('#bh_s_scope').val();
+            form.plan = planSkip();
+            form.off = new Set();
+            render();
+            return;
+        case 'skip-dismiss': {
+            const origin = form.origin;
+            form = null;
+            await afterStore(resolvePending(origin.index, origin.pid, null));
+            return;
+        }
+        case 'skip-apply': {
+            const skipId = newId();
+            const days = skipDays();
+            const ops = form.plan.filter(x => !form.off.has(x.id)).map(x => ({ ...x.op, skip: skipId, skipDays: days }));
+            const origin = form.origin;
+            form = null;
+            if (!ops.length) { render(); return; }
+            await afterStore(origin ? resolvePending(origin.index, origin.pid, ops) : writeManualOps(ops, 'timeskip'));
+            toastr.success(`Time skip applied: ${ops.length} change${ops.length === 1 ? '' : 's'}. Undo it under "Recent changes".`, 'Body HUD');
+            return;
+        }
         case 'scan': scanLatest(); return;
         case 'fill': await fillFields($(this).attr('data-field')); return;
     }
@@ -589,4 +700,18 @@ async function fillFields(field) {
     } finally {
         $('.bh-fill, [data-act="fill"]').removeClass('bh-working');
     }
+}
+
+// ---------- time skips ----------
+
+function skipDays() {
+    return Math.max(0, Number(form.amount) || 0) * (UNITS[form.unit] || 1);
+}
+
+function planSkip() {
+    const index = opts.getIndex();
+    const members = getSceneMembers();
+    const who = form.scope === 'one' ? [selected] : members.map(m => m.key);
+    const nameOf = key => members.find(m => m.key === key)?.name || key;
+    return planTimeSkip(buildBodies(), who, skipDays(), opts.getSettings().realism, nameOf, id => partName(index, id));
 }

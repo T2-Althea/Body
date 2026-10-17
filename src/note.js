@@ -42,7 +42,7 @@ function hiddenTag(c) {
 }
 
 /** One line of text plus a priority (higher = more important). */
-function conditionLine(c, partName) {
+function conditionLine(c, partName, opts = {}) {
     switch (c.kind) {
         case 'missing':
             return {
@@ -59,6 +59,9 @@ function conditionLine(c, partName) {
             if (c.status && c.status !== 'fresh') bits.push(c.status);
             if (c.details) bits.push(lc(c.details));
             if (c.bleeding && c.bleeding !== 'none') bits.push(`${c.bleeding} bleeding`);
+            // Grounded/simulation: an untreated, bleeding wound is called out so the AI keeps it in mind.
+            const untreatedBleeding = (!c.status || c.status === 'fresh') && c.bleeding && c.bleeding !== 'none';
+            if (untreatedBleeding && opts.realism && opts.realism !== 'cinematic') bits.push('untreated');
             const sev = Math.max(0, severityRank(c.severity));
             const bleed = ['none', 'light', 'moderate', 'heavy'].indexOf(c.bleeding || 'none');
             const healed = c.status === 'scarred' || c.status === 'healing' ? -15 : 0;
@@ -92,7 +95,7 @@ function wholeBodyLine(states, temp, opts, partName) {
  * @param {{ key, name, isUser }[]} members scene members, in display order
  * @param {Map} bodies from replay()
  * @param {{ parts: Map }} index expanded template
- * @param {{ budget: number, tempUnit: 'C'|'F', tempInNote: 'abnormal'|'always' }} opts
+ * @param {{ budget: number, tempUnit: 'C'|'F', tempInNote: 'abnormal'|'always', realism?: string }} opts
  * @param {(text: string) => number} countTokens
  * @returns {{ text: string, tokens: number, omitted: number }}
  */
@@ -107,7 +110,7 @@ export function buildNote(members, bodies, index, opts, countTokens) {
         const conds = [...body.conditions.values()].filter(c => !isTrivial(c));
         const states = conds.filter(c => c.kind === 'state');
         for (const c of conds.filter(c => c.kind !== 'state')) {
-            candidates.push({ mi, ...conditionLine(c, partName) });
+            candidates.push({ mi, ...conditionLine(c, partName, opts) });
         }
         const wb = wholeBodyLine(states, body.temp, opts, partName);
         if (wb) candidates.push({ mi, ...wb });

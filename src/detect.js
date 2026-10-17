@@ -3,6 +3,7 @@
 // Pure: no SillyTavern access, so prompt building and parsing are unit-tested.
 
 import { BLEEDING, BODY_PART, BODY_STATES, KINDS, MIND_PART, SEVERITIES, STATUSES, newId } from './model.js';
+import { formatDuration } from './timeskip.js';
 
 export const DETECT_TAG = '[BODY_HUD_TASK:detect]';
 export const FILL_TAG = '[BODY_HUD_TASK:fill]';
@@ -20,6 +21,9 @@ const TRIGGER = new RegExp([
     'splint', 'treat', 'medic', 'potion', 'recover', 'scar(?!f|ce|ci)', 'sever(?!al)', 'amputat', 'missing', 'panic',
     'terrif', 'griev', 'sob(?!er)', 'trembl', 'shak', 'hungry', 'thirst', 'starv', 'overheat', 'heatstroke',
     'sunburn', 'concuss', 'unconscious', 'gash', 'graze', 'pierc', 'impal', 'choke', 'strangl', 'drown',
+    // Time skips.
+    '(hours|days|weeks|months|years|a day|a week|a month|a year) (later|passed|pass|went by|go by)',
+    'the next (morning|day|evening|week)', 'time passe', 'after (a|an|two|three|several|many|a few) (hours|days|weeks|months)',
 ].map(w => `\\b${w}`).join('|'), 'i');
 
 export function mightMatter(text) {
@@ -94,6 +98,7 @@ Rules:
 - Only the characters listed. Make sure who got hurt is right.
 - If the text doesn't say left or right, give the part WITHOUT the left_/right_ prefix; never guess a side.
 - Effects are short capability limits ("can't run; limps"), not descriptions.
+- If the message explicitly skips time ("three days later", "after a week of rest"), add one {"action": "time_passes", "days": <number>}; hours are fractions of a day. Don't report healing yourself for a time skip.
 - Most messages change nothing. Then return {"changes": []}.
 
 Reply with JSON only:
@@ -101,7 +106,8 @@ Reply with JSON only:
  {"action": "add", "character": "<name>", "kind": "injury|missing|state|mind_lasting|mind_current", "part": "<part id>", "type": "<what, e.g. Arrow wound>", "severity": "minor|moderate|severe|critical", "bleeding": "none|light|moderate|heavy", "status": "fresh|treated|healing|scarred|permanent", "details": "", "effect": "", "cause": "", "hidden": false},
  {"action": "update", "character": "<name>", "id": "<c1…>", "changes": {"status": "treated", "bleeding": "none"}},
  {"action": "remove", "character": "<name>", "id": "<c1…>"},
- {"action": "temperature", "character": "<name>", "celsius": 38.5}
+ {"action": "temperature", "character": "<name>", "celsius": 38.5},
+ {"action": "time_passes", "days": 3}
 ]}
 kind "injury" = anything on a body part; "state" = whole-body states (${BODY_STATES.join(', ').toLowerCase()}…), part optional; mind kinds need no part.
 
@@ -141,6 +147,12 @@ export function parseDetection(json, { members, index, ids }) {
     const byName = name => members.find(m => m.name.toLowerCase() === str(name).toLowerCase());
     const partName = id => index.parts.get(id)?.name || id;
     for (const ch of Array.isArray(json?.changes) ? json.changes : []) {
+        if (str(ch.action).toLowerCase() === 'time_passes') {
+            const days = Number(ch.days);
+            if (!isFinite(days) || days <= 0 || days > 3650) { skipped.push('implausible time skip'); continue; }
+            out.push({ pid: newId(), who: null, op: { t: 'timeskip', days }, summary: `Time passes: ${formatDuration(days)}` });
+            continue;
+        }
         const m = byName(ch.character);
         if (!m) { skipped.push(`unknown character "${str(ch.character)}"`); continue; }
         const action = str(ch.action).toLowerCase();

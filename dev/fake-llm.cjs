@@ -40,6 +40,7 @@ function taskReply(all) {
     }
     if (text.includes('soak')) changes.push({ action: 'add', character: who, kind: 'state', type: 'Wet', severity: 'minor' });
     if (text.includes('fever')) changes.push({ action: 'temperature', character: who, celsius: 38.9 });
+    if (text.includes('three days later')) changes.push({ action: 'time_passes', days: 3 });
     return 'Here you go:\n' + JSON.stringify({ changes });
 }
 http.createServer((req, res) => {

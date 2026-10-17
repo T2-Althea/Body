@@ -467,3 +467,16 @@
 .bh-log summary {
     cursor: pointer;
 }
+
+/* ---------- time skips ---------- */
+
+.bh-skip-preview {
+    border-top: 1px solid var(--SmartThemeBorderColor);
+    margin-top: 6px;
+    padding-top: 4px;
+}
+
+.bh-form label.bh-skip-item {
+    display: flex;
+    margin: 2px 0;
+}

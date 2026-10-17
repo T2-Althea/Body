@@ -51,6 +51,12 @@ test('states limited to an area name it', () => {
     assert.match(buildNote(members, bodies, index, opts, estimateTokens).text, /- States: wet \(left foot\), cold\./);
 });
 
+test('untreated bleeding is flagged unless cinematic', () => {
+    const bodies = replay([add('user', { kind: 'injury', part: 'left_forearm', type: 'Cut', severity: 'moderate', status: 'fresh', bleeding: 'light' })]);
+    assert.match(buildNote(members, bodies, index, { ...opts, realism: 'grounded' }, estimateTokens).text, /cut, moderate, light bleeding, untreated\./);
+    assert.doesNotMatch(buildNote(members, bodies, index, { ...opts, realism: 'cinematic' }, estimateTokens).text, /untreated/);
+});
+
 test('hidden conditions are marked', () => {
     const bodies = replay([add('c:mira.png', { kind: 'injury', part: 'abdomen', type: 'Stab wound', severity: 'severe', hidden: true })]);
     assert.match(buildNote(members, bodies, index, opts, estimateTokens).text, /abdomen: stab wound, severe\. Hidden: others don't know/i);

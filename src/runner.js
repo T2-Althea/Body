@@ -114,12 +114,13 @@ async function detect(msg, { manual }) {
     }
 
     if (opts.getSettings().detectMode === 'auto') {
-        const ready = proposals.filter(p => !p.needsSide);
-        const unsure = proposals.filter(p => p.needsSide);
+        // A time skip always waits for its preview; unknown sides wait for a pick.
+        const ready = proposals.filter(p => !p.needsSide && p.op.t !== 'timeskip');
+        const unsure = proposals.filter(p => p.needsSide || p.op.t === 'timeskip');
         if (ready.length) await writeDetectedOps(msg, ready.map(p => p.op), fp);
         if (unsure.length) await addPending(msg, unsure, fp);
         toastr.info(
-            `${ready.length ? `Applied ${ready.length} change${ready.length > 1 ? 's' : ''}` : ''}${ready.length && unsure.length ? '; ' : ''}${unsure.length ? `${unsure.length} need${unsure.length > 1 ? '' : 's'} a side picked` : ''}. Undo in the HUD.`,
+            `${ready.length ? `Applied ${ready.length} change${ready.length > 1 ? 's' : ''}` : ''}${ready.length && unsure.length ? '; ' : ''}${unsure.length ? `${unsure.length} waiting for you in the HUD` : ''}. Undo in the HUD.`,
             'Body HUD', { onclick: () => opts.openPanel() },
         );
     } else {

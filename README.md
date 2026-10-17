@@ -4,7 +4,7 @@ A SillyTavern extension that keeps track of what has physically happened to the
 characters in a scene (wounds, missing limbs, being soaked and freezing, exhaustion)
 and will remind the AI with a short note before each reply.
 
-**Status: early development (M5).** You record conditions by hand in the HUD, and
+**Status: early development (M6).** You record conditions by hand in the HUD, and
 a short status note is sent to the AI before each reply. Automatic detection comes
 later. See `docs/concept.md` for the plan.
 
@@ -51,6 +51,30 @@ Changes are stored on the message that caused them: delete that message and
 they go with it. Pick a cheap model for this under **Model** (any saved
 Connection Profile), or leave it on the chat's model.
 
+## Time passing
+**Time passes** in the HUD lets you skip ahead (hours, days, weeks, months) for
+everyone in the scene or one character. You see a preview of every change, with
+a checkbox each, before anything happens:
+
+- wounds move from fresh/treated → healing → healed (minor wounds disappear,
+  bigger ones leave a scar; severe ones keep their effect line for you to trim);
+- wet, cold, muddy… wear off after a few hours; exhaustion, drunkenness, hunger
+  and current moods after a day; temperature returns to normal;
+- missing parts and lasting conditions never change.
+
+Each wound shows roughly how long until its next stage. Partial progress carries
+over between skips. A time skip is one entry under **Recent changes**, and one
+click undoes all of it. When the story itself says "three days later",
+detection proposes the time skip, and you open its preview from the review box.
+
+**Realism** (in the settings) decides how it plays:
+- **Cinematic**: four times faster, nothing gets worse on its own.
+- **Grounded** (default): realistic times, untreated wounds take twice as long to
+  start healing, and a still-bleeding untreated wound is flagged to the AI.
+- **Simulation**: untreated wounds that are more than minor get infected and
+  worse instead of healing, heavy bleeding leaves the character weak from blood
+  loss, and infection brings a fever.
+
 ## ✨ Suggestions
 In the condition form, ✨ next to Effect, Details or Cause asks the model to write
 that field from what you've filled in plus the recent story. **Fill empty** fills
@@ -65,7 +89,7 @@ short note, for example:
 User (user):
 - Abdomen: stab wound, severe. Hidden: others don't know; it only shows in behavior.
 Seraphina:
-- Left thigh: arrow wound, moderate, arrowhead still in, moderate bleeding. Can't run; limps.
+- Left thigh: arrow wound, moderate, arrowhead still in, moderate bleeding, untreated. Can't run; limps.
 - Whole body: wet, cold; temperature 35.2 °C (low).
 ```
 
@@ -77,7 +101,7 @@ Seraphina:
 
 ## Settings (Extensions → Body HUD)
 - Panel side (right or left), °C or °F, show or hide the mannequin, hide
-  sensitive parts from the part list and zoomed views.
+  sensitive parts from the part list and zoomed views, realism level.
 - Note: on/off; where it goes (in chat at a depth, default just above your latest
   message; or before or after the main prompt); sent as system, user or assistant;
   max length in tokens (default 200; the least important lines are cut first);

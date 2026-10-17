@@ -78,9 +78,9 @@ function pushOps(extra, ops, mes) {
  * Records manual edits on the latest message. Manual edits are copied into every
  * swipe of that message, so switching swipes doesn't undo what the user set by hand.
  */
-export async function writeManualOps(ops) {
+export async function writeManualOps(ops, src = 'manual') {
     const c = ctx();
-    const stamped = ops.map(op => ({ ...op, src: 'manual', oid: newId() }));
+    const stamped = ops.map(op => ({ ...op, src, oid: newId() }));
     if (!c.chat.length) {
         const meta = c.chatMetadata;
         meta[EXTRA_KEY] = meta[EXTRA_KEY] || { ops: [] };
@@ -142,7 +142,7 @@ export function collectPending() {
     return out;
 }
 
-/** Approves (op given) or rejects (op null) one proposal. */
+/** Approves (op or list of ops given) or rejects (null) one proposal. */
 export async function resolvePending(index, pid, op) {
     const msg = ctx().chat[index];
     if (!msg) return;
@@ -152,21 +152,48 @@ export async function resolvePending(index, pid, op) {
         if (p) fp = p.fp;
         rec.pending = (rec.pending || []).filter(x => x.pid !== pid);
     }
-    if (op) await writeDetectedOps(msg, [op], fp, 'review');
+    const ops = Array.isArray(op) ? op : op ? [op] : [];
+    if (ops.length) await writeDetectedOps(msg, ops, fp, 'review');
     else await ctx().saveChat();
 }
 
-/** Most recent detected/approved changes, newest first. */
+/**
+ * Most recent automatic changes, newest first: detected/approved ops one by one,
+ * and each time skip as one entry ({ skip, ops }).
+ */
 export function recentDetected(limit = 10) {
     const out = [];
+    const skips = new Map();
     const chat = ctx().chat;
     for (let i = chat.length - 1; i >= 0 && out.length < limit; i--) {
-        const ops = chat[i]?.extra?.[EXTRA_KEY]?.ops || [];
+        const ops = (chat[i]?.extra?.[EXTRA_KEY]?.ops || []).filter(op => isLive(op, chat[i].mes));
         for (let j = ops.length - 1; j >= 0 && out.length < limit; j--) {
-            if (ops[j].src === 'detect' || ops[j].src === 'review') out.push({ index: i, op: ops[j] });
+            const op = ops[j];
+            if (op.skip) {
+                if (!skips.has(op.skip)) {
+                    const entry = { index: i, skip: op.skip, days: op.skipDays, ops: [] };
+                    skips.set(op.skip, entry);
+                    out.push(entry);
+                }
+                skips.get(op.skip).ops.push(op);
+            } else if (op.src === 'detect' || op.src === 'review') {
+                out.push({ index: i, op });
+            }
         }
     }
     return out;
+}
+
+/** Undoes a whole time skip, wherever its ops were written (all swipes included). */
+export async function undoSkip(skipId) {
+    for (const m of ctx().chat) {
+        const extras = [m?.extra, ...(Array.isArray(m?.swipe_info) ? m.swipe_info.map(s => s?.extra) : [])];
+        for (const extra of extras) {
+            const rec = extra?.[EXTRA_KEY];
+            if (rec?.ops) rec.ops = rec.ops.filter(o => o.skip !== skipId);
+        }
+    }
+    await ctx().saveChat();
 }
 
 /** Removes one recorded op (by oid) from a message: undo. */
