@@ -2,76 +2,371 @@
     "id": "human",
     "name": "Human",
     "version": 1,
-    "notes": "Parts with \"sided\": true are expanded into left_ and right_ copies (children included). \"region\": true marks the zoom-level groups. \"sensitive\": true parts can be hidden from display without being untracked.",
+    "notes": "Parts with \"sided\": true are expanded into left_ and right_ copies (children included). \"region\": true marks the zoom-level groups. \"sensitive\": true parts can be hidden from display without being untracked. \"mannequin\" holds the drawing: shapes in a 100x215 box, each tied to a region id. \"sided\" shapes are drawn on the viewer's right and mirrored; in the front view the viewer's right is the character's left, in the back view it is their right.",
     "parts": [
-        { "id": "head", "name": "Head", "region": true, "children": [
-            { "id": "brain", "name": "Brain" },
-            { "id": "scalp", "name": "Scalp" },
-            { "id": "face", "name": "Face" },
-            { "id": "eye", "name": "Eye", "sided": true },
-            { "id": "ear", "name": "Ear", "sided": true },
-            { "id": "nose", "name": "Nose" },
-            { "id": "jaw", "name": "Jaw" },
-            { "id": "mouth", "name": "Mouth and teeth" }
-        ] },
-        { "id": "neck", "name": "Neck", "region": true, "children": [
-            { "id": "throat", "name": "Throat" },
-            { "id": "cervical_spine", "name": "Neck spine" }
-        ] },
-        { "id": "chest", "name": "Chest", "region": true, "children": [
-            { "id": "heart", "name": "Heart" },
-            { "id": "lung", "name": "Lung", "sided": true },
-            { "id": "ribs", "name": "Ribs", "sided": true },
-            { "id": "sternum", "name": "Sternum" },
-            { "id": "collarbone", "name": "Collarbone", "sided": true },
-            { "id": "breast", "name": "Breast", "sided": true }
-        ] },
-        { "id": "upper_back", "name": "Upper back", "region": true, "children": [
-            { "id": "shoulder_blade", "name": "Shoulder blade", "sided": true },
-            { "id": "thoracic_spine", "name": "Upper spine" }
-        ] },
-        { "id": "abdomen", "name": "Abdomen", "region": true, "children": [
-            { "id": "stomach", "name": "Stomach" },
-            { "id": "liver", "name": "Liver" },
-            { "id": "spleen", "name": "Spleen" },
-            { "id": "kidney", "name": "Kidney", "sided": true },
-            { "id": "intestines", "name": "Intestines" }
-        ] },
-        { "id": "lower_back", "name": "Lower back", "region": true, "children": [
-            { "id": "lumbar_spine", "name": "Lower spine" }
-        ] },
-        { "id": "pelvis", "name": "Pelvis", "region": true, "children": [
-            { "id": "hip", "name": "Hip", "sided": true },
-            { "id": "bladder", "name": "Bladder" },
-            { "id": "buttocks", "name": "Buttocks" },
-            { "id": "genitals", "name": "Genitals", "sensitive": true }
-        ] },
-        { "id": "arm", "name": "Arm", "sided": true, "region": true, "children": [
-            { "id": "shoulder", "name": "Shoulder" },
-            { "id": "upper_arm", "name": "Upper arm" },
-            { "id": "elbow", "name": "Elbow" },
-            { "id": "forearm", "name": "Forearm" },
-            { "id": "hand", "name": "Hand", "region": true, "children": [
-                { "id": "wrist", "name": "Wrist" },
-                { "id": "palm", "name": "Palm" },
-                { "id": "thumb", "name": "Thumb" },
-                { "id": "index_finger", "name": "Index finger" },
-                { "id": "middle_finger", "name": "Middle finger" },
-                { "id": "ring_finger", "name": "Ring finger" },
-                { "id": "little_finger", "name": "Little finger" }
-            ] }
-        ] },
-        { "id": "leg", "name": "Leg", "sided": true, "region": true, "children": [
-            { "id": "thigh", "name": "Thigh" },
-            { "id": "knee", "name": "Knee" },
-            { "id": "shin", "name": "Shin" },
-            { "id": "calf", "name": "Calf" },
-            { "id": "foot", "name": "Foot", "region": true, "children": [
-                { "id": "ankle", "name": "Ankle" },
-                { "id": "heel", "name": "Heel" },
-                { "id": "sole", "name": "Sole" },
-                { "id": "toes", "name": "Toes" }
-            ] }
-        ] }
-    ]
+        {
+            "id": "head",
+            "name": "Head",
+            "region": true,
+            "children": [
+                {
+                    "id": "brain",
+                    "name": "Brain"
+                },
+                {
+                    "id": "scalp",
+                    "name": "Scalp"
+                },
+                {
+                    "id": "face",
+                    "name": "Face"
+                },
+                {
+                    "id": "eye",
+                    "name": "Eye",
+                    "sided": true
+                },
+                {
+                    "id": "ear",
+                    "name": "Ear",
+                    "sided": true
+                },
+                {
+                    "id": "nose",
+                    "name": "Nose"
+                },
+                {
+                    "id": "jaw",
+                    "name": "Jaw"
+                },
+                {
+                    "id": "mouth",
+                    "name": "Mouth and teeth"
+                }
+            ]
+        },
+        {
+            "id": "neck",
+            "name": "Neck",
+            "region": true,
+            "children": [
+                {
+                    "id": "throat",
+                    "name": "Throat"
+                },
+                {
+                    "id": "cervical_spine",
+                    "name": "Neck spine"
+                }
+            ]
+        },
+        {
+            "id": "chest",
+            "name": "Chest",
+            "region": true,
+            "children": [
+                {
+                    "id": "heart",
+                    "name": "Heart"
+                },
+                {
+                    "id": "lung",
+                    "name": "Lung",
+                    "sided": true
+                },
+                {
+                    "id": "ribs",
+                    "name": "Ribs",
+                    "sided": true
+                },
+                {
+                    "id": "sternum",
+                    "name": "Sternum"
+                },
+                {
+                    "id": "collarbone",
+                    "name": "Collarbone",
+                    "sided": true
+                },
+                {
+                    "id": "breast",
+                    "name": "Breast",
+                    "sided": true
+                }
+            ]
+        },
+        {
+            "id": "upper_back",
+            "name": "Upper back",
+            "region": true,
+            "children": [
+                {
+                    "id": "shoulder_blade",
+                    "name": "Shoulder blade",
+                    "sided": true
+                },
+                {
+                    "id": "thoracic_spine",
+                    "name": "Upper spine"
+                }
+            ]
+        },
+        {
+            "id": "abdomen",
+            "name": "Abdomen",
+            "region": true,
+            "children": [
+                {
+                    "id": "stomach",
+                    "name": "Stomach"
+                },
+                {
+                    "id": "liver",
+                    "name": "Liver"
+                },
+                {
+                    "id": "spleen",
+                    "name": "Spleen"
+                },
+                {
+                    "id": "kidney",
+                    "name": "Kidney",
+                    "sided": true
+                },
+                {
+                    "id": "intestines",
+                    "name": "Intestines"
+                }
+            ]
+        },
+        {
+            "id": "lower_back",
+            "name": "Lower back",
+            "region": true,
+            "children": [
+                {
+                    "id": "lumbar_spine",
+                    "name": "Lower spine"
+                }
+            ]
+        },
+        {
+            "id": "pelvis",
+            "name": "Pelvis",
+            "region": true,
+            "children": [
+                {
+                    "id": "hip",
+                    "name": "Hip",
+                    "sided": true
+                },
+                {
+                    "id": "bladder",
+                    "name": "Bladder"
+                },
+                {
+                    "id": "buttocks",
+                    "name": "Buttocks"
+                },
+                {
+                    "id": "genitals",
+                    "name": "Genitals",
+                    "sensitive": true
+                }
+            ]
+        },
+        {
+            "id": "arm",
+            "name": "Arm",
+            "sided": true,
+            "region": true,
+            "children": [
+                {
+                    "id": "shoulder",
+                    "name": "Shoulder"
+                },
+                {
+                    "id": "upper_arm",
+                    "name": "Upper arm"
+                },
+                {
+                    "id": "elbow",
+                    "name": "Elbow"
+                },
+                {
+                    "id": "forearm",
+                    "name": "Forearm"
+                },
+                {
+                    "id": "hand",
+                    "name": "Hand",
+                    "region": true,
+                    "children": [
+                        {
+                            "id": "wrist",
+                            "name": "Wrist"
+                        },
+                        {
+                            "id": "palm",
+                            "name": "Palm"
+                        },
+                        {
+                            "id": "thumb",
+                            "name": "Thumb"
+                        },
+                        {
+                            "id": "index_finger",
+                            "name": "Index finger"
+                        },
+                        {
+                            "id": "middle_finger",
+                            "name": "Middle finger"
+                        },
+                        {
+                            "id": "ring_finger",
+                            "name": "Ring finger"
+                        },
+                        {
+                            "id": "little_finger",
+                            "name": "Little finger"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "leg",
+            "name": "Leg",
+            "sided": true,
+            "region": true,
+            "children": [
+                {
+                    "id": "thigh",
+                    "name": "Thigh"
+                },
+                {
+                    "id": "knee",
+                    "name": "Knee"
+                },
+                {
+                    "id": "shin",
+                    "name": "Shin"
+                },
+                {
+                    "id": "calf",
+                    "name": "Calf"
+                },
+                {
+                    "id": "foot",
+                    "name": "Foot",
+                    "region": true,
+                    "children": [
+                        {
+                            "id": "ankle",
+                            "name": "Ankle"
+                        },
+                        {
+                            "id": "heel",
+                            "name": "Heel"
+                        },
+                        {
+                            "id": "sole",
+                            "name": "Sole"
+                        },
+                        {
+                            "id": "toes",
+                            "name": "Toes"
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "mannequin": {
+        "viewBox": "0 0 100 215",
+        "front": [
+            {
+                "region": "head",
+                "d": "M50 4 C57 4 61 10 61 17 C61 25 56 30 50 30 C44 30 39 25 39 17 C39 10 43 4 50 4 Z"
+            },
+            {
+                "region": "neck",
+                "d": "M45 30 L55 30 L56 36 L44 36 Z"
+            },
+            {
+                "region": "chest",
+                "d": "M44 37 L56 37 C62 37 67 38 68 42 L66 64 L34 64 L32 42 C33 38 38 37 44 37 Z"
+            },
+            {
+                "region": "abdomen",
+                "d": "M34 65 L66 65 L64 88 L36 88 Z"
+            },
+            {
+                "region": "pelvis",
+                "d": "M36 89 L64 89 C66 95 66 100 64 104 L56 108 L50 102 L44 108 L36 104 C34 100 34 95 36 89 Z"
+            },
+            {
+                "region": "arm",
+                "sided": true,
+                "d": "M70 41 C74 43 75 49 75 57 L77 78 L79 98 L73 99 L70 80 L67 62 Z"
+            },
+            {
+                "region": "hand",
+                "sided": true,
+                "d": "M73 101 L80 100 C82 104 82 110 79 114 C76 116 73 114 72 110 Z"
+            },
+            {
+                "region": "leg",
+                "sided": true,
+                "d": "M51 106 L56 110 L64 106 C65 122 64 136 62 150 L60 195 L53 195 L52 150 C51 136 50 120 51 106 Z"
+            },
+            {
+                "region": "foot",
+                "sided": true,
+                "d": "M53 197 L60 197 L63 205 C63 208 61 209 58 209 L52 209 C51 205 52 200 53 197 Z"
+            }
+        ],
+        "back": [
+            {
+                "region": "head",
+                "d": "M50 4 C57 4 61 10 61 17 C61 25 56 30 50 30 C44 30 39 25 39 17 C39 10 43 4 50 4 Z"
+            },
+            {
+                "region": "neck",
+                "d": "M45 30 L55 30 L56 36 L44 36 Z"
+            },
+            {
+                "region": "upper_back",
+                "d": "M44 37 L56 37 C62 37 67 38 68 42 L66 64 L34 64 L32 42 C33 38 38 37 44 37 Z"
+            },
+            {
+                "region": "lower_back",
+                "d": "M34 65 L66 65 L64 88 L36 88 Z"
+            },
+            {
+                "region": "pelvis",
+                "d": "M36 89 L64 89 C66 95 66 100 64 104 L56 108 L50 102 L44 108 L36 104 C34 100 34 95 36 89 Z"
+            },
+            {
+                "region": "arm",
+                "sided": true,
+                "d": "M70 41 C74 43 75 49 75 57 L77 78 L79 98 L73 99 L70 80 L67 62 Z"
+            },
+            {
+                "region": "hand",
+                "sided": true,
+                "d": "M73 101 L80 100 C82 104 82 110 79 114 C76 116 73 114 72 110 Z"
+            },
+            {
+                "region": "leg",
+                "sided": true,
+                "d": "M51 106 L56 110 L64 106 C65 122 64 136 62 150 L60 195 L53 195 L52 150 C51 136 50 120 51 106 Z"
+            },
+            {
+                "region": "foot",
+                "sided": true,
+                "d": "M53 197 L60 197 L63 205 C63 208 61 209 58 209 L52 209 C51 205 52 200 53 197 Z"
+            }
+        ]
+    }
 }

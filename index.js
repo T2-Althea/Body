@@ -15,6 +15,7 @@ const defaultSettings = Object.freeze({
     panelOpen: false,
     tempUnit: 'C',
     hideSensitive: false,
+    showMannequin: true,
     // The note the AI sees.
     inject: true,
     position: 1,      // 1 = in chat at depth, 0 = after the main prompt, 2 = before it
@@ -104,7 +105,11 @@ function renderSettings() {
                         <option value="F" ${sel('F', s.tempUnit)}>°F</option>
                     </select>
                 </div>
-                <label class="checkbox_label" title="Still tracked; just left out of the part picker.">
+                <label class="checkbox_label">
+                    <input type="checkbox" id="body_hud_mannequin" ${s.showMannequin ? 'checked' : ''}>
+                    <span>Show the mannequin</span>
+                </label>
+                <label class="checkbox_label" title="Still tracked; just left out of the part picker and zoomed views.">
                     <input type="checkbox" id="body_hud_sensitive" ${s.hideSensitive ? 'checked' : ''}>
                     <span>Hide sensitive parts from the part list</span>
                 </label>
@@ -162,6 +167,7 @@ function renderSettings() {
     bind('#body_hud_side', 'side', el => el.value);
     bind('#body_hud_unit', 'tempUnit', el => el.value);
     bind('#body_hud_sensitive', 'hideSensitive', el => el.checked);
+    bind('#body_hud_mannequin', 'showMannequin', el => el.checked);
     bind('#body_hud_inject', 'inject', el => el.checked);
     bind('#body_hud_position', 'position', el => Number(el.value));
     bind('#body_hud_depth', 'depth', num(0, 50));

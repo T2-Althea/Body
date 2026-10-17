@@ -59,7 +59,7 @@ const { check, finish } = makeChecker();
     // Whole-body state, mind, missing part, temperature.
     await page.click('[data-act="add"]');
     await page.selectOption('#bh_f_kind', 'state');
-    check('state form hides the part picker', !(await visible('.bh-f-part')));
+    check('state form offers an optional area instead of a required part', (await page.locator('.bh-f-part-label').innerText()) === 'Area (optional)');
     await page.fill('#bh_f_type', 'Wet');
     await page.selectOption('#bh_f_sev', 'minor');
     await page.click('[data-act="save"]');

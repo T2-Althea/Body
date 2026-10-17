@@ -18,7 +18,8 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
   `chatMetadata.body_hud` as a baseline. The user's body key is `user`;
   characters are `c:<avatar filename>`.
 - Code layout: `src/model.js` (pure: templates, ops, replay; unit-tested),
-  `src/note.js` (pure: the AI's note; unit-tested), `src/store.js` (chat read/write),
+  `src/note.js` (pure: the AI's note; unit-tested), `src/mannequin.js` (pure: SVG
+  figures, region status; unit-tested), `src/store.js` (chat read/write),
   `src/panel.js` (side panel UI), `index.js` (wiring, settings, injection).
 - The side panel uses viewport units (`dvh`), not `%`: ST's mobile layout
   transforms `<html>`, which breaks `%`-based fixed positioning.
@@ -31,8 +32,13 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
 - [x] M1 Data model and templates; manual editing in a list view (in the side panel).
 - [x] M2 Injection: the status note (`src/note.js`, set on every state change and
       in the `bodyHudInterceptor` generate interceptor before each generation).
-- [ ] M3 Mannequin view.
-- [ ] M4 Automatic detection, review queue, undo.
+- [x] M3 Mannequin view (`src/mannequin.js`; shapes live in the template's
+      `mannequin` block). Zoom = parts list per region with "+" per part.
+      Also: "Injury" kind relabelled "On a body part"; states take an optional area.
+- [ ] M4 Automatic detection, review queue, undo. Also planned here (user request):
+      ✨ buttons in the condition form that fill Effect/Details/Cause from the
+      filled fields + recent chat, plus a "fill all empty" button; same model/
+      Connection Profile picker as detection; never overwrite typed text.
 - [ ] M5 Swipe/branch handling (fingerprints, regen clearing).
 - [ ] M6 Time skips and realism levels.
 - [ ] M7 Template editor and NPC bodies.

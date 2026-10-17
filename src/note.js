@@ -71,14 +71,16 @@ function conditionLine(c, partName) {
 }
 
 /** Whole-body states and temperature collapse into a single line. */
-function wholeBodyLine(states, temp, opts) {
+function wholeBodyLine(states, temp, opts, partName) {
     const showTemp = temp !== null && (opts.tempInNote === 'always' || isAbnormalTemp(temp));
     if (!states.length && !showTemp) return null;
-    const names = states.map(s => lc(s.type) + (s.hidden ? ' (hidden)' : ''));
+    const local = s => s.part && s.part !== BODY_PART;
+    const names = states.map(s => lc(s.type) + (local(s) ? ` (${lc(partName(s.part))})` : '') + (s.hidden ? ' (hidden)' : ''));
     const parts = [];
     if (names.length) parts.push(names.join(', '));
     if (showTemp) parts.push(`temperature ${formatTemp(temp, opts.tempUnit)} (${tempLabel(temp)})`);
-    let text = 'Whole body: ' + parts.join('; ') + '.';
+    // "Whole body" only when nothing is limited to an area.
+    let text = (states.some(local) ? 'States: ' : 'Whole body: ') + parts.join('; ') + '.';
     const effects = states.map(s => s.effect).filter(Boolean).map(endDot);
     if (effects.length) text += ' ' + effects.join(' ');
     const worst = Math.max(0, ...states.map(s => severityRank(s.severity)));
@@ -107,7 +109,7 @@ export function buildNote(members, bodies, index, opts, countTokens) {
         for (const c of conds.filter(c => c.kind !== 'state')) {
             candidates.push({ mi, ...conditionLine(c, partName) });
         }
-        const wb = wholeBodyLine(states, body.temp, opts);
+        const wb = wholeBodyLine(states, body.temp, opts, partName);
         if (wb) candidates.push({ mi, ...wb });
     });
     if (!candidates.length) return { text: '', tokens: 0, omitted: 0 };

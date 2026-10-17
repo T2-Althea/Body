@@ -285,3 +285,125 @@
     padding: 6px;
     margin: 4px 0;
 }
+
+/* ---------- mannequin ---------- */
+
+.bh-mannequin {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin: 4px 0 8px;
+}
+
+.bh-m-figure {
+    margin: 0;
+    flex: 1;
+    max-width: 150px;
+    text-align: center;
+}
+
+.bh-m-figure svg {
+    width: 100%;
+    height: auto;
+    max-height: 42dvh;
+}
+
+.bh-m-figure figcaption {
+    font-size: 0.75em;
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.bh-m-region {
+    fill: var(--black30a);
+    stroke: var(--SmartThemeBodyColor);
+    stroke-opacity: 0.45;
+    stroke-width: 0.6;
+    cursor: pointer;
+    transition: fill 0.12s;
+}
+
+.bh-m-region:hover {
+    fill: var(--SmartThemeQuoteColor);
+    fill-opacity: 0.45;
+}
+
+.bh-m-region.bh-m-minor { fill: var(--bh-minor); fill-opacity: 0.8; }
+.bh-m-region.bh-m-moderate { fill: var(--bh-moderate); fill-opacity: 0.85; }
+.bh-m-region.bh-m-severe { fill: var(--bh-severe); fill-opacity: 0.9; }
+.bh-m-region.bh-m-critical { fill: var(--bh-critical); fill-opacity: 0.95; }
+
+.bh-m-region.bh-m-missing {
+    fill: transparent;
+    stroke-dasharray: 2 1.5;
+    stroke-opacity: 0.6;
+}
+
+.bh-m-region.bh-m-partly {
+    stroke-dasharray: 2 1.5;
+    stroke-opacity: 0.9;
+}
+
+/* ---------- zoomed region ---------- */
+
+.bh-zoom {
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin: 4px 0 8px;
+}
+
+.bh-zoom-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.bh-zrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+    border-bottom: 1px solid var(--black30a);
+}
+
+.bh-zname {
+    flex: 1 1 auto;
+}
+
+.bh-zrow.bh-zmissing .bh-zname,
+.bh-zlink.bh-zmissing {
+    opacity: 0.45;
+    text-decoration: line-through;
+}
+
+.bh-zlink {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.bh-zlink:hover {
+    color: var(--SmartThemeQuoteColor);
+}
+
+.bh-zadd {
+    margin-left: auto;
+}
+
+.bh-zchip {
+    cursor: pointer;
+    font-size: 0.8em;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-left-width: 3px;
+    border-radius: 4px;
+    padding: 0 6px;
+}
+
+.bh-zchip.bh-sev-minor { border-left-color: var(--bh-minor); }
+.bh-zchip.bh-sev-moderate { border-left-color: var(--bh-moderate); }
+.bh-zchip.bh-sev-severe { border-left-color: var(--bh-severe); }
+.bh-zchip.bh-sev-critical { border-left-color: var(--bh-critical); }
+.bh-zchip.bh-sev-missing { border-left-style: dashed; border-left-color: var(--bh-missing); }

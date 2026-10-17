@@ -43,6 +43,14 @@ test('trivial leftovers drop off; normal temperature stays out', () => {
     assert.equal(buildNote(members, bodies, index, opts, estimateTokens).text, '');
 });
 
+test('states limited to an area name it', () => {
+    const bodies = replay([
+        add('user', { kind: 'state', part: 'left_foot', type: 'Wet', severity: 'minor' }),
+        add('user', { kind: 'state', part: '_body', type: 'Cold', severity: 'minor' }),
+    ]);
+    assert.match(buildNote(members, bodies, index, opts, estimateTokens).text, /- States: wet \(left foot\), cold\./);
+});
+
 test('hidden conditions are marked', () => {
     const bodies = replay([add('c:mira.png', { kind: 'injury', part: 'abdomen', type: 'Stab wound', severity: 'severe', hidden: true })]);
     assert.match(buildNote(members, bodies, index, opts, estimateTokens).text, /abdomen: stab wound, severe\. Hidden: others don't know/i);

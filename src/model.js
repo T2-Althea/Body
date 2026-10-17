@@ -7,7 +7,7 @@ export const STATUSES = ['fresh', 'treated', 'healing', 'scarred', 'permanent'];
 
 // Condition kinds. `part` is a template part id, or BODY_PART for whole-body states.
 export const KINDS = {
-    injury: 'Injury',
+    injury: 'On a body part',
     missing: 'Missing part',
     state: 'Whole-body state',
     mind_lasting: 'Mind: lasting condition',
@@ -24,7 +24,7 @@ export const BODY_STATES = [
 /**
  * Expands a template into a flat index. Sided parts become left_/right_ copies,
  * with every descendant prefixed the same way.
- * @returns {{ parts: Map<string, object>, order: string[] }}
+ * @returns {{ parts: Map<string, object>, order: string[], mannequin: object|null }}
  */
 export function expandTemplate(template) {
     const parts = new Map();
@@ -51,7 +51,7 @@ export function expandTemplate(template) {
         }
     }
     for (const root of template.parts || []) visit(root, null, '', 0, null);
-    return { parts, order };
+    return { parts, order, mannequin: template.mannequin || null };
 }
 
 export function newId() {

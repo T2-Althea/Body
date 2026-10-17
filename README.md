@@ -4,7 +4,7 @@ A SillyTavern extension that keeps track of what has physically happened to the
 characters in a scene (wounds, missing limbs, being soaked and freezing, exhaustion)
 and will remind the AI with a short note before each reply.
 
-**Status: early development (M2).** You record conditions by hand in the HUD, and
+**Status: early development (M3).** You record conditions by hand in the HUD, and
 a short status note is sent to the AI before each reply. Automatic detection comes
 later. See `docs/concept.md` for the plan.
 
@@ -19,8 +19,13 @@ Requires SillyTavern 1.19.0 or newer.
 - The HUD hides while SillyTavern's own panel on that side is open (the character
   list on the right; AI Response Configuration or World Info on the left) and
   comes back when it closes. On phones it opens over the chat.
-- Pick a character at the top, then **+ Condition** to add an injury, a missing
-  part, a whole-body state (wet, cold, exhausted…), or a mental condition.
+- Pick a character at the top. The mannequin shows front and back; regions are
+  tinted by their worst condition (yellow minor → dark red critical), missing parts
+  are dashed. Hover a region for its conditions; click it to zoom into its parts,
+  and press **+** next to any part to add a condition there.
+- **+ Condition** adds anything on a body part (wounds, numbness, rashes,
+  swelling…), a missing part, a whole-body state (wet, cold, exhausted…;
+  optionally limited to an area like "left foot"), or a mental condition.
   **Temperature** sets body temperature.
 - Changes are saved on the latest message. Deleting that message removes them;
   swiping between replies keeps them.
@@ -45,12 +50,14 @@ Seraphina:
 - Muted group members are left out.
 
 ## Settings (Extensions → Body HUD)
-- Panel side (right or left), °C or °F, hide sensitive parts from the part list.
+- Panel side (right or left), °C or °F, show or hide the mannequin, hide
+  sensitive parts from the part list and zoomed views.
 - Note: on/off; where it goes (in chat at a depth, default just above your latest
   message; or before or after the main prompt); sent as system, user or assistant;
   max length in tokens (default 200; the least important lines are cut first);
   temperature always or only when abnormal.
 
 ## Body templates
-`templates/human.json` defines the parts tree. Parts marked `"sided": true` get
-left and right copies automatically.
+`templates/human.json` defines the parts tree and the mannequin drawing. Parts
+marked `"sided": true` get left and right copies automatically; so do mannequin
+shapes, which are drawn once and mirrored.

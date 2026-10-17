@@ -5,6 +5,7 @@ import {
     BLEEDING, BODY_PART, BODY_STATES, KINDS, MIND_PART, SEVERITIES, STATUSES,
     isAffected, missingParts, newId, severityRank,
 } from './model.js';
+import { renderMannequin } from './mannequin.js';
 import { buildBodies, getSceneMembers, hasOpenChat, writeManualOps } from './store.js';
 
 const INJURY_TYPES = [
@@ -18,9 +19,10 @@ const SIDE_DRAWERS = {
     left: ['#left-nav-panel', '#WorldInfo'],
 };
 
-let opts;            // { getSettings, saveSettings, getIndex }
+let opts;            // { getSettings, saveSettings, getIndex, getNote, onStateChange }
 let selected = null; // member key currently shown
-let form = null;     // null | { mode: 'add' | 'edit' | 'temp', id?: string }
+let form = null;     // null | { mode: 'add' | 'edit' | 'temp', id?: string, part?: string }
+let zoom = null;     // region id being inspected, or null for the whole body
 let observer = null;
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }[ch]));
@@ -55,7 +57,8 @@ export function initPanel(options) {
     $('#body_hud_tab').on('click', () => setOpen(true));
     $('#body_hud_close').on('click', () => setOpen(false));
     $('#body_hud_panel')
-        .on('click', '.bh-member', function () { selected = $(this).attr('data-key'); form = null; render(); })
+        .on('click', '.bh-member', function () { selected = $(this).attr('data-key'); form = null; zoom = null; render(); })
+        .on('click', '.bh-m-region', function () { zoom = this.getAttribute('data-region'); render(); })
         .on('click', '[data-act]', onAction)
         .on('change', '#bh_f_kind', () => updateFormFields());
     // 'toggle' doesn't bubble, so listen in the capture phase.
@@ -125,6 +128,11 @@ export function render() {
 
     const body = bodies.get(selected) || { conditions: new Map(), temp: null };
     let html = '';
+    if (zoom && index.parts.has(zoom)) html += renderZoom(body, index);
+    else if (opts.getSettings().showMannequin) {
+        zoom = null;
+        html += renderMannequin(index.mannequin, body, index);
+    }
     if (form) html += renderForm(body, index);
 
     const conds = [...body.conditions.values()];
@@ -138,7 +146,8 @@ export function render() {
         html += `<span class="bh-chip" data-act="temp" title="Body temperature">🌡 ${toUnit(body.temp)} ${unitLabel()}</span>`;
     }
     for (const c of states) {
-        html += `<span class="bh-chip bh-sev-${esc(c.severity)}" data-act="edit" data-id="${esc(c.id)}" title="${esc(c.effect || '')}">${esc(c.type)}${c.hidden ? ' 🙈' : ''}</span>`;
+        const area = c.part && c.part !== BODY_PART ? ` · ${partName(index, c.part)}` : '';
+        html += `<span class="bh-chip bh-sev-${esc(c.severity)}" data-act="edit" data-id="${esc(c.id)}" title="${esc(c.effect || '')}">${esc(c.type)}${esc(area)}${c.hidden ? ' 🙈' : ''}</span>`;
     }
     html += '</div></div>';
 
@@ -151,7 +160,7 @@ export function render() {
             if (!byRegion.has(regionId)) byRegion.set(regionId, []);
             byRegion.get(regionId).push(c);
         }
-        html += section('Injuries', [...byRegion.entries()].map(([rid, list]) => `
+        html += section('On the body', [...byRegion.entries()].map(([rid, list]) => `
             <div class="bh-region">${esc(index.parts.get(rid)?.name || rid)}</div>
             ${list.map(c => condRow(c, index)).join('')}`).join(''));
     }
@@ -177,6 +186,49 @@ export function render() {
 
     content.html(html);
     if (form && form.mode !== 'temp') updateFormFields();
+    if (form?.scroll) {
+        form.scroll = false;
+        content.find('.bh-form')[0]?.scrollIntoView({ block: 'nearest' });
+    }
+}
+
+// Zoomed-in region: every part inside it with its conditions, and a "+" per part.
+// Nested regions (the hand inside the arm) appear as links to zoom further.
+function renderZoom(body, index) {
+    const region = index.parts.get(zoom);
+    const lost = missingParts(body, index);
+    const hideSensitive = opts.getSettings().hideSensitive;
+    const condsOn = id => [...body.conditions.values()].filter(c => c.part === id && c.kind !== 'state');
+    const parentRegion = region.parentId ? index.parts.get(region.parentId)?.regionId : null;
+
+    const rows = [];
+    const visit = (id, depth) => {
+        const p = index.parts.get(id);
+        if (!p) return;
+        if (id !== zoom && p.region) {
+            rows.push(`<div class="bh-zrow bh-zlink ${lost.has(id) ? 'bh-zmissing' : ''}" style="padding-left:${depth * 12}px" data-act="zoom" data-region="${esc(id)}">
+                ${esc(p.name)} <i class="fa-solid fa-chevron-right"></i></div>`);
+            return;
+        }
+        const conds = condsOn(id);
+        if (hideSensitive && p.sensitive && !conds.length) return;
+        const chips = conds.map(c => `<span class="bh-zchip bh-sev-${esc(c.kind === 'missing' ? 'missing' : c.severity)}" data-act="edit" data-id="${esc(c.id)}">${esc(c.kind === 'missing' ? 'missing' : c.type)}</span>`).join('');
+        rows.push(`<div class="bh-zrow ${lost.has(id) ? 'bh-zmissing' : ''}" style="padding-left:${depth * 12}px">
+            <span class="bh-zname">${esc(id === zoom ? `${p.name} (general)` : p.name)}</span>${chips}
+            <span class="fa-solid fa-plus bh-iconbtn bh-zadd" data-act="add-on" data-part="${esc(id)}" title="Add a condition here"></span>
+        </div>`);
+        if (id === zoom) p.children.forEach(ch => visit(ch, 1));
+        else p.children.forEach(ch => visit(ch, depth + 1));
+    };
+    visit(zoom, 0);
+
+    return `<div class="bh-zoom">
+        <div class="bh-zoom-head">
+            <span class="fa-solid fa-arrow-left bh-iconbtn" data-act="zoom" data-region="${esc(parentRegion || '')}" title="Back"></span>
+            <b>${esc(region.name)}</b>
+        </div>
+        ${rows.join('')}
+    </div>`;
 }
 
 // Exactly what will be sent before the next reply, for every body in the scene.
@@ -260,7 +312,7 @@ function renderForm(body, index) {
     }
 
     const c = form.mode === 'edit' ? body.conditions.get(form.id) : null;
-    const v = c || { kind: 'injury', part: '', type: '', severity: 'moderate', bleeding: 'none', status: 'fresh', effect: '', details: '', cause: '', hidden: false };
+    const v = c || { kind: 'injury', part: form.part || '', type: '', severity: 'moderate', bleeding: 'none', status: 'fresh', effect: '', details: '', cause: '', hidden: false };
     const hideSensitive = opts.getSettings().hideSensitive;
     const partOpts = index.order
         .filter(id => !(hideSensitive && index.parts.get(id).sensitive) || id === v.part)
@@ -272,7 +324,7 @@ function renderForm(body, index) {
     return `<div class="bh-form">
         <div class="bh-section-title">${c ? 'Edit condition' : 'New condition'}</div>
         <label>Kind <select id="bh_f_kind" class="text_pole">${options(Object.keys(KINDS), v.kind || 'injury', Object.values(KINDS))}</select></label>
-        <label class="bh-f-part">Part <select id="bh_f_part" class="text_pole"><option value="">— choose —</option>${partOpts}</select></label>
+        <label class="bh-f-part"><span class="bh-f-part-label">Part</span> <select id="bh_f_part" class="text_pole"><option value="">— choose —</option>${partOpts}</select></label>
         <label class="bh-f-type">What <input id="bh_f_type" class="text_pole" list="bh_types" value="${esc(v.type)}" placeholder="e.g. Arrow wound"></label>
         <datalist id="bh_types"></datalist>
         <div class="bh-row">
@@ -295,7 +347,10 @@ function renderForm(body, index) {
 function updateFormFields() {
     const kind = $('#bh_f_kind').val();
     const isInjury = kind === 'injury';
-    $('.bh-f-part').toggle(isInjury || kind === 'missing');
+    const isState = kind === 'state';
+    $('.bh-f-part').toggle(isInjury || kind === 'missing' || isState);
+    $('.bh-f-part-label').text(isState ? 'Area (optional)' : 'Part');
+    $('#bh_f_part option[value=""]').text(isState ? 'Whole body' : '— choose —');
     $('.bh-f-type').toggle(kind !== 'missing');
     $('.bh-f-bleed').toggle(isInjury);
     $('.bh-f-sev').toggle(kind !== 'missing');
@@ -308,7 +363,7 @@ function updateFormFields() {
 function readForm() {
     const kind = $('#bh_f_kind').val();
     let part = $('#bh_f_part').val();
-    if (kind === 'state') part = BODY_PART;
+    if (kind === 'state') part = part || BODY_PART;
     if (kind === 'mind_lasting' || kind === 'mind_current') part = MIND_PART;
     const cond = {
         kind,
@@ -333,8 +388,10 @@ async function onAction(e) {
     const id = $(this).attr('data-id');
     let ops = null;
     switch (act) {
-        case 'add': form = { mode: 'add' }; break;
-        case 'edit': form = { mode: 'edit', id }; break;
+        case 'add': form = { mode: 'add', scroll: true }; break;
+        case 'add-on': form = { mode: 'add', part: $(this).attr('data-part'), scroll: true }; break;
+        case 'zoom': zoom = $(this).attr('data-region') || null; break;
+        case 'edit': form = { mode: 'edit', id, scroll: true }; break;
         case 'temp': form = { mode: 'temp' }; break;
         case 'cancel': form = null; break;
         case 'remove':
