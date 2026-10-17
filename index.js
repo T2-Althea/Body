@@ -1,19 +1,22 @@
-// Body HUD — SillyTavern extension.
-// M0 scaffold: settings panel, and a diagnostic probe that exercises the two
-// SillyTavern mechanisms the real extension depends on:
-//   1. prompt injection (setExtensionPrompt) — the note the AI will see;
-//   2. per-message storage (message.extra) — where body changes will live so
-//      they follow swipes, edits, deletions and branches.
+// Body HUD — SillyTavern extension entry point.
 // Everything goes through SillyTavern.getContext() so the extension works no
 // matter which folder it is installed into.
 
+import { expandTemplate } from './src/model.js';
+import { applyLayout, initPanel, render } from './src/panel.js';
+
 const MODULE = 'body_hud';
-const PROBE_KEY = 'body_hud_probe';
 
 const defaultSettings = Object.freeze({
     enabled: true,
+    side: 'right',
+    panelOpen: false,
+    tempUnit: 'C',
+    hideSensitive: false,
     probeInjection: false,
 });
+
+let templateIndex = null;
 
 function ctx() {
     return SillyTavern.getContext();
@@ -29,43 +32,18 @@ function saveSettings() {
     ctx().saveSettingsDebounced();
 }
 
-// The probe note is re-set before every generation and cleared when off, so it
-// never accumulates in the chat — only the current value is ever in the prompt.
+async function loadTemplate() {
+    const res = await fetch(new URL('./templates/human.json', import.meta.url));
+    templateIndex = expandTemplate(await res.json());
+}
+
+// Diagnostic from M0, kept until M2 replaces it with the real status note.
 function updateProbeInjection() {
-    const { setExtensionPrompt } = ctx();
     const s = getSettings();
     const text = s.enabled && s.probeInjection
         ? '[Body HUD probe — injection is working. Ignore this line.]'
         : '';
-    // position 1 = in-chat, depth 1 = just above the latest message, role 0 = system
-    setExtensionPrompt(MODULE, text, 1, 1, false, 0);
-}
-
-function stampLastMessage() {
-    const { chat, saveChat } = ctx();
-    if (!chat.length) {
-        toastr.info('No messages in this chat.');
-        return '';
-    }
-    const id = chat.length - 1;
-    const msg = chat[id];
-    msg.extra = msg.extra || {};
-    msg.extra[PROBE_KEY] = { swipe: msg.swipe_id ?? 0, at: Date.now() };
-    saveChat();
-    toastr.success(`Stamped message #${id}.`);
-    return '';
-}
-
-function reportStamps() {
-    const { chat } = ctx();
-    const lines = [];
-    chat.forEach((m, i) => {
-        const p = m.extra?.[PROBE_KEY];
-        if (p) lines.push(`#${i} (now on swipe ${m.swipe_id ?? 0}): stamped on swipe ${p.swipe}`);
-    });
-    const out = lines.length ? lines.join('\n') : 'No stamped messages in this chat.';
-    toastr.info(out.replace(/\n/g, '<br>'), 'Body HUD probe', { escapeHtml: false });
-    return out;
+    ctx().setExtensionPrompt(MODULE, text, 1, 1, false, 0);
 }
 
 function renderSettings() {
@@ -82,50 +60,76 @@ function renderSettings() {
                     <input type="checkbox" id="body_hud_enabled" ${s.enabled ? 'checked' : ''}>
                     <span>Enabled</span>
                 </label>
+                <div class="bh-setting-row">
+                    <span>Panel side</span>
+                    <select id="body_hud_side" class="text_pole">
+                        <option value="right" ${s.side !== 'left' ? 'selected' : ''}>Right</option>
+                        <option value="left" ${s.side === 'left' ? 'selected' : ''}>Left</option>
+                    </select>
+                </div>
+                <div class="bh-setting-row">
+                    <span>Temperature</span>
+                    <select id="body_hud_unit" class="text_pole">
+                        <option value="C" ${s.tempUnit !== 'F' ? 'selected' : ''}>°C</option>
+                        <option value="F" ${s.tempUnit === 'F' ? 'selected' : ''}>°F</option>
+                    </select>
+                </div>
+                <label class="checkbox_label" title="Still tracked; just left out of the part picker.">
+                    <input type="checkbox" id="body_hud_sensitive" ${s.hideSensitive ? 'checked' : ''}>
+                    <span>Hide sensitive parts from the part list</span>
+                </label>
                 <hr>
-                <small class="body-hud-muted">Diagnostics (early development build)</small>
+                <small class="body-hud-muted">Diagnostics</small>
                 <label class="checkbox_label" title="Adds a one-line test note to every prompt. Check it in the Prompt Itemizer.">
                     <input type="checkbox" id="body_hud_probe" ${s.probeInjection ? 'checked' : ''}>
                     <span>Probe: inject a test note</span>
                 </label>
-                <small class="body-hud-muted">Slash commands: <code>/bodyhud-stamp</code> marks the last message, <code>/bodyhud-check</code> lists marked messages.</small>
             </div>
         </div>
     </div>`;
     $('#extensions_settings2').append(html);
 
-    $('#body_hud_enabled').on('change', function () {
-        getSettings().enabled = this.checked;
+    const bind = (sel, key, read) => $(sel).on('change', function () {
+        getSettings()[key] = read(this);
         saveSettings();
+        applyLayout();
         updateProbeInjection();
+        render();
     });
-    $('#body_hud_probe').on('change', function () {
-        getSettings().probeInjection = this.checked;
-        saveSettings();
-        updateProbeInjection();
-    });
+    bind('#body_hud_enabled', 'enabled', el => el.checked);
+    bind('#body_hud_side', 'side', el => el.value);
+    bind('#body_hud_unit', 'tempUnit', el => el.value);
+    bind('#body_hud_sensitive', 'hideSensitive', el => el.checked);
+    bind('#body_hud_probe', 'probeInjection', el => el.checked);
 }
 
-function registerCommands() {
-    const { SlashCommandParser, SlashCommand } = ctx();
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'bodyhud-stamp',
-        callback: stampLastMessage,
-        helpString: 'Body HUD diagnostics: store a marker on the last message.',
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'bodyhud-check',
-        callback: reportStamps,
-        helpString: 'Body HUD diagnostics: list messages carrying a marker.',
-    }));
+let renderQueued = false;
+function queueRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    setTimeout(() => { renderQueued = false; render(); }, 50);
 }
 
-jQuery(() => {
+jQuery(async () => {
     const { eventSource, eventTypes } = ctx();
     getSettings();
     renderSettings();
-    registerCommands();
+    try {
+        await loadTemplate();
+    } catch (e) {
+        console.error('[Body HUD] failed to load template', e);
+        toastr.error('Body HUD could not load its body template.');
+    }
+    initPanel({ getSettings, saveSettings, getIndex: () => templateIndex });
     updateProbeInjection();
+
+    for (const ev of [
+        eventTypes.CHAT_CHANGED, eventTypes.CHAT_LOADED, eventTypes.MESSAGE_SENT, eventTypes.MESSAGE_RECEIVED,
+        eventTypes.MESSAGE_EDITED, eventTypes.MESSAGE_DELETED, eventTypes.MESSAGE_SWIPED,
+        eventTypes.MESSAGE_SWIPE_DELETED, eventTypes.GROUP_UPDATED, eventTypes.PERSONA_CHANGED,
+    ]) {
+        if (ev) eventSource.on(ev, queueRender);
+    }
     eventSource.on(eventTypes.CHAT_CHANGED, updateProbeInjection);
     console.log('[Body HUD] loaded');
 });

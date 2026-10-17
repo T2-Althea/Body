@@ -13,12 +13,21 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
   from the start of the chat. Never keep a separate "current state" that can
   drift from the chat. Records carry a fingerprint of their source message text
   (swipes inherit `extra`; see orientation doc §3).
+- Manual edits are written to the latest message *and all its swipes* (so
+  switching swipes doesn't undo them); with no messages they go to
+  `chatMetadata.body_hud` as a baseline. The user's body key is `user`;
+  characters are `c:<avatar filename>`.
+- Code layout: `src/model.js` (pure: templates, ops, replay; unit-tested),
+  `src/store.js` (chat read/write), `src/panel.js` (side panel UI), `index.js` (wiring, settings).
+- The side panel uses viewport units (`dvh`), not `%`: ST's mobile layout
+  transforms `<html>`, which breaks `%`-based fixed positioning.
 - A healthy character injects nothing. The note has a token budget.
-- Test changes end to end with the harness in `dev/` before pushing.
+- Test changes end to end with the harness in `dev/` before pushing, plus
+  `node --test tests/*.test.mjs`.
 
 ## Milestones
 - [x] M0 Orientation: extension system, `message.extra` and swipes, injection.
-- [ ] M1 Data model and templates; manual editing in a list view.
+- [x] M1 Data model and templates; manual editing in a list view (in the side panel).
 - [ ] M2 Injection: the status note.
 - [ ] M3 Mannequin view.
 - [ ] M4 Automatic detection, review queue, undo.

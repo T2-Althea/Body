@@ -10,4 +10,6 @@ ln -sfn "$PWD/Body" st/data/default-user/extensions/Body
 node Body/dev/configure-st.cjs st                 # point ST at the fake backend
 node Body/dev/fake-llm.cjs 5001 requests.jsonl &
 node Body/dev/e2e-m0.cjs http://127.0.0.1:8000/ requests.jsonl   # needs playwright
+node Body/dev/e2e-m1.cjs http://127.0.0.1:8000/ requests.jsonl [screenshot-dir]
+node --test Body/tests/*.test.mjs                                # unit tests, no ST needed
 ```

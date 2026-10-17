@@ -44,6 +44,8 @@ const check = (name, ok, detail = '') => {
     // Open the bundled Seraphina character.
     await page.evaluate(() => SillyTavern.getContext().selectCharacterById(0));
     await page.waitForFunction(() => SillyTavern.getContext().chat.length > 0);
+    await page.evaluate(() => SillyTavern.getContext().executeSlashCommandsWithOptions('/newchat'));
+    await page.waitForTimeout(1500);
 
     const send = async (text) => {
         const before = requestCount();
@@ -54,7 +56,6 @@ const check = (name, ok, detail = '') => {
         await page.waitForTimeout(500);
     };
     const setProbe = on => page.evaluate(v => { const el = document.querySelector('#body_hud_probe'); el.checked = v; el.dispatchEvent(new Event('change')); }, on);
-    const slash = cmd => page.evaluate(c => SillyTavern.getContext().executeSlashCommandsWithOptions(c), cmd);
     const lastExtra = () => page.evaluate(() => { const c = SillyTavern.getContext().chat; const m = c[c.length - 1]; return { swipe: m.swipe_id ?? 0, stamp: m.extra?.body_hud_probe ?? null }; });
 
     // 1. Injection on.
@@ -75,7 +76,10 @@ const check = (name, ok, detail = '') => {
     check('probe note gone when disabled', !JSON.stringify(lastRequest().messages).includes(PROBE));
 
     // 4. message.extra across swipes.
-    await slash('/bodyhud-stamp');
+    await page.evaluate(() => {
+        const c = SillyTavern.getContext(); const m = c.chat[c.chat.length - 1];
+        m.extra = m.extra || {}; m.extra.body_hud_probe = { swipe: m.swipe_id ?? 0, at: Date.now() };
+    });
     const stamped = await lastExtra();
     check('stamp stored on last message', stamped.stamp !== null, JSON.stringify(stamped));
 

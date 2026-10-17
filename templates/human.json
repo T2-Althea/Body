@@ -1,0 +1,77 @@
+{
+    "id": "human",
+    "name": "Human",
+    "version": 1,
+    "notes": "Parts with \"sided\": true are expanded into left_ and right_ copies (children included). \"region\": true marks the zoom-level groups. \"sensitive\": true parts can be hidden from display without being untracked.",
+    "parts": [
+        { "id": "head", "name": "Head", "region": true, "children": [
+            { "id": "brain", "name": "Brain" },
+            { "id": "scalp", "name": "Scalp" },
+            { "id": "face", "name": "Face" },
+            { "id": "eye", "name": "Eye", "sided": true },
+            { "id": "ear", "name": "Ear", "sided": true },
+            { "id": "nose", "name": "Nose" },
+            { "id": "jaw", "name": "Jaw" },
+            { "id": "mouth", "name": "Mouth and teeth" }
+        ] },
+        { "id": "neck", "name": "Neck", "region": true, "children": [
+            { "id": "throat", "name": "Throat" },
+            { "id": "cervical_spine", "name": "Neck spine" }
+        ] },
+        { "id": "chest", "name": "Chest", "region": true, "children": [
+            { "id": "heart", "name": "Heart" },
+            { "id": "lung", "name": "Lung", "sided": true },
+            { "id": "ribs", "name": "Ribs", "sided": true },
+            { "id": "sternum", "name": "Sternum" },
+            { "id": "collarbone", "name": "Collarbone", "sided": true },
+            { "id": "breast", "name": "Breast", "sided": true }
+        ] },
+        { "id": "upper_back", "name": "Upper back", "region": true, "children": [
+            { "id": "shoulder_blade", "name": "Shoulder blade", "sided": true },
+            { "id": "thoracic_spine", "name": "Upper spine" }
+        ] },
+        { "id": "abdomen", "name": "Abdomen", "region": true, "children": [
+            { "id": "stomach", "name": "Stomach" },
+            { "id": "liver", "name": "Liver" },
+            { "id": "spleen", "name": "Spleen" },
+            { "id": "kidney", "name": "Kidney", "sided": true },
+            { "id": "intestines", "name": "Intestines" }
+        ] },
+        { "id": "lower_back", "name": "Lower back", "region": true, "children": [
+            { "id": "lumbar_spine", "name": "Lower spine" }
+        ] },
+        { "id": "pelvis", "name": "Pelvis", "region": true, "children": [
+            { "id": "hip", "name": "Hip", "sided": true },
+            { "id": "bladder", "name": "Bladder" },
+            { "id": "buttocks", "name": "Buttocks" },
+            { "id": "genitals", "name": "Genitals", "sensitive": true }
+        ] },
+        { "id": "arm", "name": "Arm", "sided": true, "region": true, "children": [
+            { "id": "shoulder", "name": "Shoulder" },
+            { "id": "upper_arm", "name": "Upper arm" },
+            { "id": "elbow", "name": "Elbow" },
+            { "id": "forearm", "name": "Forearm" },
+            { "id": "hand", "name": "Hand", "region": true, "children": [
+                { "id": "wrist", "name": "Wrist" },
+                { "id": "palm", "name": "Palm" },
+                { "id": "thumb", "name": "Thumb" },
+                { "id": "index_finger", "name": "Index finger" },
+                { "id": "middle_finger", "name": "Middle finger" },
+                { "id": "ring_finger", "name": "Ring finger" },
+                { "id": "little_finger", "name": "Little finger" }
+            ] }
+        ] },
+        { "id": "leg", "name": "Leg", "sided": true, "region": true, "children": [
+            { "id": "thigh", "name": "Thigh" },
+            { "id": "knee", "name": "Knee" },
+            { "id": "shin", "name": "Shin" },
+            { "id": "calf", "name": "Calf" },
+            { "id": "foot", "name": "Foot", "region": true, "children": [
+                { "id": "ankle", "name": "Ankle" },
+                { "id": "heel", "name": "Heel" },
+                { "id": "sole", "name": "Sole" },
+                { "id": "toes", "name": "Toes" }
+            ] }
+        ] }
+    ]
+}
