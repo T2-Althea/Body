@@ -143,3 +143,20 @@ form, Kind dropdown first, many fields irrelevant per kind). Redesign:
   recent story (today ✨ only fills Effect/Details/Cause).
 - Keep old records working: map existing kinds (injury, missing, state,
   mind_lasting, mind_current, mark) onto the new categories without migration.
+
+## How we work (user's workflow)
+- The user plays on their own SillyTavern; this repo is installed there from the
+  GitHub URL. Work happens in the cloud sandbox: set up SillyTavern + the fake
+  backend per `dev/README.md`, build, then verify with `dev/run-all.sh` (unit +
+  every e2e) before pushing. Add an e2e script (or extend one) for new features.
+- Look at real screenshots of the UI (the e2e scripts save them) and send the
+  relevant ones to the user with each update; they like seeing results.
+- Commit and push to the session's designated branch; the user updates the
+  extension in SillyTavern and tests with their real model, then reports back.
+  No PRs unless asked.
+- Report plainly what changed, what was tested (counts), what couldn't be tested
+  here (real model behaviour), and what to try. The user isn't a programmer:
+  explain SillyTavern/LLM concepts briefly when they come up.
+- Run servers in the foreground (run-all.sh does): background jobs get killed
+  after ~2 h. The user's model is a reasoning model at times (DeepSeek thinking):
+  keep background request token allowances generous.
