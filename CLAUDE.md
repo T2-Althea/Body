@@ -115,3 +115,31 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
   library usable across characters. One compact "Wearing:" line in the note
   only when relevant. Later ties: wet clothing → wet state, armor covers regions,
   missing parts can't wear items. M4 detection can propose clothing changes.
+
+## Next up: condition form redesign (user request, do before the other extras)
+The mannequin navigation is fine; the "+ Condition" form is awkward (one long
+form, Kind dropdown first, many fields irrelevant per kind). Redesign:
+- **Four categories instead of the Kind dropdown:** Body (on a part / missing;
+  merges injury + whole-body state with optional area), Mind (one entry with a
+  Lasting / Current toggle), Status effect (poison, medicine effects and side
+  effects, magic-induced enhancement or curse…: new kind, whole-body, with an
+  intensity and optional duration), Mark (tattoo/paint, keep as is). Pick the
+  category first (tabs or 4 buttons), then show only that category's fields.
+- **One "progress" block per entry:** severity, bleeding (body only), status,
+  and duration together.
+- **Duration in replies (experimental, opt-in per entry):** "clears / heals in
+  N replies from <affected character>": count that character's messages after
+  the entry's message during replay; when reached, treat as removed (or one
+  stage healed). Must stay derived from the chat (works with swipes/deletes).
+- **Natural / cyclical body states (no severity/bleeding/status):** a
+  "Natural" option under Body that hides those fields. Female: period
+  (menstruation), ovulation, pregnancy (with stage/trimester), lactation,
+  menopause. Male: suggestions offered were andropause (age-related low
+  testosterone), and for fantasy settings rut/heat (both sexes); user isn't
+  sure what else, keep the list editable. Filter by the body's sex like parts.
+- **Pain level** field (none / mild / moderate / severe / agonizing), manual or
+  ✨-suggested from the condition ("pick the logical one").
+- **✨ for "What" too:** fully random suggestion fitting the part, category and
+  recent story (today ✨ only fills Effect/Details/Cause).
+- Keep old records working: map existing kinds (injury, missing, state,
+  mind_lasting, mind_current, mark) onto the new categories without migration.
