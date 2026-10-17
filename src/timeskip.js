@@ -28,6 +28,7 @@ const STATE_FADE = {
 };
 const MIND_FADE = { cinematic: 0.25, grounded: 1, simulation: 1 };
 const TEMP_FADE = 0.25;
+const MARK_FADE = 3; // temporary marks (body paint, henna…) fade in a few days
 
 export const UNITS = { hours: 1 / 24, days: 1, weeks: 7, months: 30 };
 
@@ -99,6 +100,10 @@ export function planTimeSkip(bodies, who, days, realism, nameOf, partName) {
             }
             if (c.kind === 'mind_current') {
                 if (days >= MIND_FADE[realism]) push(key, { t: 'remove', who: key, id: c.id }, `${c.type.toLowerCase()} has passed`, 'clear');
+                continue;
+            }
+            if (c.kind === 'mark') {
+                if (c.status === 'temporary' && days >= MARK_FADE / speed) push(key, { t: 'remove', who: key, id: c.id }, `${label} has faded`, 'clear');
                 continue;
             }
             if (c.kind && c.kind !== 'injury') continue; // missing parts, lasting mind conditions

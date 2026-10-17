@@ -25,7 +25,9 @@ const defaultSettings = Object.freeze({
     budget: 200,      // tokens
     tempInNote: 'abnormal',
     notePreviewOpen: false,
-    realism: 'grounded',    // cinematic | grounded | simulation (time skips; untreated flag in the note)
+    realism: 'grounded',
+    profiles: {},           // body sex per character/persona: { 'c:<avatar>' | 'u:<persona>': { sex } }
+    marksInNote: true,      // tattoos/paint in the AI's note (one short line, cut first)    // cinematic | grounded | simulation (time skips; untreated flag in the note)
     // Automatic detection.
     detectMode: 'ask',      // off | manual (button only) | ask (review first) | auto (apply, with undo)
     detectUser: true,       // also check the user's own messages
@@ -66,6 +68,7 @@ function computeNote({ skipDetectedAt = -1 } = {}) {
         tempUnit: s.tempUnit,
         tempInNote: s.tempInNote,
         realism: s.realism,
+        marksInNote: s.marksInNote,
     }, estimateTokens);
 }
 
@@ -150,6 +153,10 @@ function renderSettings() {
                         <option value="2" ${sel(2, s.position)}>Before the main prompt</option>
                     </select>
                 </div>
+                <label class="checkbox_label" title="Tattoos, body paint and brands, as one short line that is the first to go when the note is too long.">
+                    <input type="checkbox" id="body_hud_marks" ${s.marksInNote ? 'checked' : ''}>
+                    <span>Include marks (tattoos, paint) in the note</span>
+                </label>
                 <div class="bh-setting-row" title="0 = after the latest message, 1 = just above it, and so on.">
                     <span>Depth</span>
                     <input id="body_hud_depth" class="text_pole" type="number" min="0" max="50" value="${s.depth}">
@@ -223,6 +230,7 @@ function renderSettings() {
     bind('#body_hud_sensitive', 'hideSensitive', el => el.checked);
     bind('#body_hud_mannequin', 'showMannequin', el => el.checked);
     bind('#body_hud_realism', 'realism', el => el.value);
+    bind('#body_hud_marks', 'marksInNote', el => el.checked);
     bind('#body_hud_inject', 'inject', el => el.checked);
     bind('#body_hud_position', 'position', el => Number(el.value));
     bind('#body_hud_depth', 'depth', num(0, 50));

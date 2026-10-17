@@ -109,7 +109,7 @@ Reply with JSON only:
  {"action": "temperature", "character": "<name>", "celsius": 38.5},
  {"action": "time_passes", "days": 3}
 ]}
-kind "injury" = anything on a body part; "state" = whole-body states (${BODY_STATES.join(', ').toLowerCase()}…), part optional; mind kinds need no part.
+kind "mark" = tattoos, body paint, brands (status "permanent" or "temporary"); kind "injury" = anything else on a body part; "state" = whole-body states (${BODY_STATES.join(', ').toLowerCase()}…), part optional; mind kinds need no part.
 
 Part ids. * = needs a left_ or right_ prefix; a * on a region (before the colon) applies to every part on that line, e.g. leg* → left_thigh, right_knee:
 ${partGuide(index)}`;
@@ -160,7 +160,7 @@ export function parseDetection(json, { members, index, ids }) {
             const kind = pick(ch.kind, Object.keys(KINDS), 'injury');
             let part = null;
             let needsSide = null;
-            if (kind === 'injury' || kind === 'missing') {
+            if (kind === 'injury' || kind === 'missing' || kind === 'mark') {
                 const r = resolvePart(ch.part, index);
                 if (!r.id && !r.base) { skipped.push(`unknown part "${str(ch.part)}"`); continue; }
                 part = r.id;
@@ -177,9 +177,10 @@ export function parseDetection(json, { members, index, ids }) {
                 kind,
                 part,
                 type,
-                severity: kind === 'missing' ? null : pick(ch.severity, SEVERITIES, 'moderate'),
+                severity: kind === 'missing' || kind === 'mark' ? null : pick(ch.severity, SEVERITIES, 'moderate'),
                 bleeding: kind === 'injury' ? pick(ch.bleeding, BLEEDING, 'none') : null,
-                status: kind === 'injury' || kind === 'missing' ? pick(ch.status, STATUSES, kind === 'missing' ? 'permanent' : 'fresh') : null,
+                status: kind === 'injury' || kind === 'missing' ? pick(ch.status, STATUSES, kind === 'missing' ? 'permanent' : 'fresh')
+                    : kind === 'mark' ? pick(ch.status, ['permanent', 'temporary'], 'permanent') : null,
                 details: str(ch.details),
                 effect: str(ch.effect),
                 cause: str(ch.cause),

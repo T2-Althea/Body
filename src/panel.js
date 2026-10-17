@@ -2,8 +2,8 @@
 // chat. Hides itself while SillyTavern's own drawer on the same side is open.
 
 import {
-    BLEEDING, BODY_PART, BODY_STATES, KINDS, MIND_PART, SEVERITIES, STATUSES,
-    isAffected, missingParts, newId, severityRank,
+    BLEEDING, BODY_PART, BODY_STATES, KINDS, MARK_DURATIONS, MIND_PART, SEVERITIES, SEXES, STATUSES,
+    isAffected, missingParts, newId, partShown, severityRank,
 } from './model.js';
 import { withSide } from './detect.js';
 import { describeFailure } from './llm.js';
@@ -11,8 +11,11 @@ import { renderMannequin } from './mannequin.js';
 import { isBusy, scanLatest, suggestFields } from './runner.js';
 import { UNITS, daysToNextStage, formatDuration, planTimeSkip } from './timeskip.js';
 import {
-    buildBodies, collectPending, getSceneMembers, hasOpenChat, recentDetected, resolvePending, undoOp, undoSkip, writeManualOps,
+    buildBodies, collectPending, getSceneMembers, hasOpenChat, memberSex, profileKey, recentDetected, resolvePending,
+    undoOp, undoSkip, writeManualOps,
 } from './store.js';
+
+const MARK_TYPES = ['Tattoo', 'Body paint', 'War paint', 'Brand', 'Birthmark', 'Scar', 'Henna', 'Rune'];
 
 const INJURY_TYPES = [
     'Cut', 'Stab wound', 'Arrow wound', 'Gunshot wound', 'Bite', 'Claw marks', 'Bruise',
@@ -67,6 +70,15 @@ export function initPanel(options) {
         .on('click', '.bh-member', function () { selected = $(this).attr('data-key'); form = null; zoom = null; render(); })
         .on('click', '.bh-m-region', function () { zoom = this.getAttribute('data-region'); render(); })
         .on('click', '[data-act]', onAction)
+        .on('change', '#bh_p_sex', function () {
+            const m = selectedMember();
+            if (!m) return;
+            const s = opts.getSettings();
+            s.profiles = s.profiles || {};
+            s.profiles[profileKey(m)] = { ...(s.profiles[profileKey(m)] || {}), sex: this.value };
+            opts.saveSettings();
+            render();
+        })
         .on('change', '#bh_f_kind', () => updateFormFields())
         .on('change', '#bh_s_amount, #bh_s_unit, #bh_s_scope', () => {
             if (form?.mode !== 'skip') return;
@@ -149,14 +161,19 @@ export function render() {
     membersEl.html(members.map(m => `
         <div class="bh-member menu_button ${m.key === selected ? 'bh-active' : ''}" data-key="${esc(m.key)}">
             ${esc(m.name)}${m.isUser ? ' <small>(you)</small>' : ''}${m.muted ? ' <small>(muted)</small>' : ''}${isAffected(bodies.get(m.key)) ? '<span class="bh-dot"></span>' : ''}
-        </div>`).join(''));
+        </div>`).join('') + renderProfile(members));
+
+    // A form editing a proposal (or previewing a story time skip) closes once that
+    // proposal has been applied or rejected some other way.
+    const proposalForm = form?.mode === 'review' ? form : form?.origin ? { index: form.origin.index, pid: form.origin.pid } : null;
+    if (proposalForm && !collectPending().some(p => p.index === proposalForm.index && p.pid === proposalForm.pid)) form = null;
 
     const body = bodies.get(selected) || { conditions: new Map(), temp: null };
     let html = renderPending(members);
     if (zoom && index.parts.has(zoom)) html += renderZoom(body, index);
     else if (opts.getSettings().showMannequin) {
         zoom = null;
-        html += renderMannequin(index.mannequin, body, index);
+        html += renderMannequin(index.mannequin, body, index, { variant: currentSex() === 'female' ? 'feminine' : null });
     }
     if (form) html += renderForm(body, index);
 
@@ -165,6 +182,7 @@ export function render() {
     const mind = conds.filter(c => c.kind === 'mind_lasting' || c.kind === 'mind_current');
     const injuries = conds.filter(c => c.kind === 'injury' || !c.kind);
     const missing = conds.filter(c => c.kind === 'missing');
+    const marks = conds.filter(c => c.kind === 'mark');
 
     html += '<div class="bh-section"><div class="bh-chips">';
     if (body.temp !== null) {
@@ -193,10 +211,12 @@ export function render() {
     if (missing.length) {
         const lost = missingParts(body, index);
         html += section('Missing', missing.map(c => {
-            const below = [...lost].filter(id => id !== c.part && isDescendant(index, id, c.part)).length;
+            const below = [...lost].filter(id => id !== c.part && isDescendant(index, id, c.part) && partShown(index.parts.get(id), { sex: currentSex() })).length;
             return condRow(c, index, below ? `includes ${below} part${below > 1 ? 's' : ''} below it` : '');
         }).join(''));
     }
+
+    if (marks.length) html += section('Marks', marks.map(c => condRow(c, index)).join(''));
 
     if (!conds.length && body.temp === null) {
         html += '<div class="bh-empty">No conditions. Nothing is sent to the AI for this character.</div>';
@@ -242,8 +262,9 @@ function renderZoom(body, index) {
             return;
         }
         const conds = condsOn(id);
-        if (hideSensitive && p.sensitive && !conds.length) return;
-        const chips = conds.map(c => `<span class="bh-zchip bh-sev-${esc(c.kind === 'missing' ? 'missing' : c.severity)}" data-act="edit" data-id="${esc(c.id)}">${esc(c.kind === 'missing' ? 'missing' : c.type)}</span>`).join('');
+        if (!partShown(p, { sex: currentSex(), hideSensitive }) && !conds.length) return;
+        const chipClass = c => c.kind === 'missing' ? 'missing' : c.kind === 'mark' ? 'mark' : c.severity;
+        const chips = conds.map(c => `<span class="bh-zchip bh-sev-${esc(chipClass(c))}" data-act="edit" data-id="${esc(c.id)}">${esc(c.kind === 'missing' ? 'missing' : c.type)}</span>`).join('');
         rows.push(`<div class="bh-zrow ${lost.has(id) ? 'bh-zmissing' : ''}" style="padding-left:${depth * 12}px">
             <span class="bh-zname">${esc(id === zoom ? `${p.name} (general)` : p.name)}</span>${chips}
             <span class="fa-solid fa-plus bh-iconbtn bh-zadd" data-act="add-on" data-part="${esc(id)}" title="Add a condition here"></span>
@@ -369,8 +390,9 @@ function healingHint(c) {
 function condRow(c, index, note = '') {
     const meta = [
         c.kind === 'injury' || !c.kind ? cap(c.severity) : null,
+        c.kind === 'mark' ? (c.status === 'temporary' ? 'Temporary' : 'Permanent') : null,
         c.bleeding && c.bleeding !== 'none' ? `bleeding: ${c.bleeding}` : null,
-        c.status ? cap(c.status) : null,
+        c.status && c.kind !== 'mark' ? cap(c.status) : null,
         healingHint(c),
         c.kind === 'mind_current' ? 'current' : c.kind === 'mind_lasting' ? 'lasting' : null,
         c.since >= 0 ? `since #${c.since}` : 'before the chat',
@@ -460,7 +482,7 @@ function renderForm(body, index) {
     const fill = field => `<span class="fa-solid fa-wand-magic-sparkles bh-fill" data-act="fill" data-field="${field}" title="Suggest this from the condition and the recent story"></span>`;
     const hideSensitive = opts.getSettings().hideSensitive;
     const partOpts = index.order
-        .filter(id => !(hideSensitive && index.parts.get(id).sensitive) || id === v.part)
+        .filter(id => partShown(index.parts.get(id), { sex: currentSex(), hideSensitive }) || id === v.part)
         .map(id => {
             const p = index.parts.get(id);
             return `<option value="${esc(id)}" ${id === v.part ? 'selected' : ''}>${'  '.repeat(p.depth)}${esc(p.name)}</option>`;
@@ -480,6 +502,7 @@ function renderForm(body, index) {
         <label>Effect (what they can't do) ${fill('effect')}<input id="bh_f_effect" class="text_pole" value="${esc(v.effect)}" placeholder="e.g. Can't run; limps"></label>
         <label>Details ${fill('details')}<input id="bh_f_details" class="text_pole" value="${esc(v.details)}" placeholder="e.g. Arrowhead still lodged"></label>
         <label>Cause ${fill('cause')}<input id="bh_f_cause" class="text_pole" value="${esc(v.cause)}" placeholder="e.g. Bandit's arrow"></label>
+        <label class="bh-f-lasts">Lasts <select id="bh_f_lasts" class="text_pole">${options(Object.keys(MARK_DURATIONS), v.kind === 'mark' ? (v.status || 'permanent') : 'permanent', Object.values(MARK_DURATIONS))}</select></label>
         <label class="checkbox_label"><input id="bh_f_hidden" type="checkbox" ${v.hidden ? 'checked' : ''}> <span>Hidden from other characters</span></label>
         <div class="bh-actions">
             <div class="menu_button" data-act="save">${form.mode === 'review' ? 'Apply' : 'Save'}</div>
@@ -494,15 +517,17 @@ function updateFormFields() {
     const kind = $('#bh_f_kind').val();
     const isInjury = kind === 'injury';
     const isState = kind === 'state';
-    $('.bh-f-part').toggle(isInjury || kind === 'missing' || isState);
+    const isMark = kind === 'mark';
+    $('.bh-f-part').toggle(isInjury || kind === 'missing' || isState || isMark);
+    $('.bh-f-lasts').toggle(isMark);
     $('.bh-f-part-label').text(isState ? 'Area (optional)' : 'Part');
     $('#bh_f_part option[value=""]').text(isState ? 'Whole body' : '— choose —');
     $('.bh-f-type').toggle(kind !== 'missing');
     $('.bh-f-bleed').toggle(isInjury);
-    $('.bh-f-sev').toggle(kind !== 'missing');
+    $('.bh-f-sev').toggle(kind !== 'missing' && !isMark);
     $('.bh-f-status').toggle(isInjury || kind === 'missing');
     if (kind === 'missing' && form?.mode === 'add') $('#bh_f_status').val('permanent');
-    const list = kind === 'state' ? BODY_STATES : isInjury ? INJURY_TYPES : [];
+    const list = kind === 'state' ? BODY_STATES : isInjury ? INJURY_TYPES : isMark ? MARK_TYPES : [];
     $('#bh_types').html(list.map(t => `<option value="${esc(t)}">`).join(''));
 }
 
@@ -531,15 +556,15 @@ function readForm() {
         kind,
         part,
         type: kind === 'missing' ? 'Missing' : String($('#bh_f_type').val()).trim(),
-        severity: kind === 'missing' ? null : $('#bh_f_sev').val(),
+        severity: kind === 'missing' || kind === 'mark' ? null : $('#bh_f_sev').val(),
         bleeding: kind === 'injury' ? $('#bh_f_bleed').val() : null,
-        status: kind === 'injury' || kind === 'missing' ? $('#bh_f_status').val() : null,
+        status: kind === 'injury' || kind === 'missing' ? $('#bh_f_status').val() : kind === 'mark' ? $('#bh_f_lasts').val() : null,
         effect: String($('#bh_f_effect').val()).trim(),
         details: String($('#bh_f_details').val()).trim(),
         cause: String($('#bh_f_cause').val()).trim(),
         hidden: $('#bh_f_hidden').is(':checked'),
     };
-    if ((kind === 'injury' || kind === 'missing') && !cond.part) return { error: 'Choose a body part.' };
+    if ((kind === 'injury' || kind === 'missing' || kind === 'mark') && !cond.part) return { error: 'Choose a body part.' };
     if (kind !== 'missing' && !cond.type) return { error: 'Describe what it is (the "What" field).' };
     return { cond };
 }
@@ -714,4 +739,28 @@ function planSkip() {
     const who = form.scope === 'one' ? [selected] : members.map(m => m.key);
     const nameOf = key => members.find(m => m.key === key)?.name || key;
     return planTimeSkip(buildBodies(), who, skipDays(), opts.getSettings().realism, nameOf, id => partName(index, id));
+}
+
+// ---------- body profile (sex / shape) ----------
+
+function selectedMember() {
+    return getSceneMembers().find(m => m.key === selected) || null;
+}
+
+/** The selected character's body sex: saved choice or a guess from their description. */
+function currentSex() {
+    const m = selectedMember();
+    return m ? memberSex(m, opts.getSettings().profiles).sex : 'unspecified';
+}
+
+function renderProfile(members) {
+    const m = members.find(x => x.key === selected);
+    if (!m) return '';
+    const { sex, guessed } = memberSex(m, opts.getSettings().profiles);
+    const choices = Object.entries(SEXES).map(([k, label]) => `<option value="${k}" ${k === sex ? 'selected' : ''}>${label}</option>`).join('');
+    return `<div class="bh-profile" title="Sets the mannequin's shape and which sex-specific parts are listed. Saved for this ${m.isUser ? 'persona' : 'character'} in every chat.">
+        <span>Body</span>
+        <select id="bh_p_sex" class="text_pole">${choices}</select>
+        ${guessed ? '<small class="bh-guess">guessed from the description</small>' : ''}
+    </div>`;
 }

@@ -21,10 +21,13 @@ export function mirrorPath(d, width = 100) {
  * Sided shapes are drawn on the viewer's right: that's the character's left
  * from the front and their right from the back.
  */
-export function viewShapes(mannequin, view) {
+export function viewShapes(mannequin, view, variant = null) {
     const width = Number(String(mannequin.viewBox || '0 0 100 215').split(/\s+/)[2]) || 100;
     const out = [];
-    for (const s of mannequin[view] || []) {
+    // A variant (e.g. "feminine") replaces the base shape of each region it draws.
+    const overrides = new Map((mannequin.variants?.[variant]?.[view] || []).map(s => [s.region, s]));
+    for (const base of mannequin[view] || []) {
+        const s = overrides.get(base.region) || base;
         if (!s.sided) {
             out.push({ region: s.region, d: s.d });
             continue;
@@ -83,12 +86,12 @@ function tooltip(regionName, st, partName) {
 }
 
 /** HTML for the front and back figures side by side. */
-export function renderMannequin(mannequin, body, index, { selectedRegion = null } = {}) {
+export function renderMannequin(mannequin, body, index, { selectedRegion = null, variant = null } = {}) {
     if (!mannequin) return '';
     const status = regionStatus(body, index);
     const partName = id => index.parts.get(id)?.name || id;
     const figure = (view, label) => {
-        const shapes = viewShapes(mannequin, view).filter(s => index.parts.has(s.region));
+        const shapes = viewShapes(mannequin, view, variant).filter(s => index.parts.has(s.region));
         const paths = shapes.map(s => {
             const st = status.get(s.region);
             const cls = ['bh-m-region'];

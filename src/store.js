@@ -2,7 +2,7 @@
 // (message.extra.body_hud) so they follow deletions and branches; a chat with no
 // messages yet keeps them in chat metadata as a baseline.
 
-import { fingerprint, newId, replay } from './model.js';
+import { fingerprint, guessSex, newId, replay } from './model.js';
 
 export const EXTRA_KEY = 'body_hud';
 export const USER_KEY = 'user';
@@ -146,6 +146,8 @@ export function collectPending() {
 export async function resolvePending(index, pid, op) {
     const msg = ctx().chat[index];
     if (!msg) return;
+    // Already applied or rejected elsewhere: don't write it a second time.
+    if (!(msg.extra?.[EXTRA_KEY]?.pending || []).some(x => x.pid === pid)) return;
     let fp = null;
     for (const rec of currentCopies(msg)) {
         const p = (rec.pending || []).find(x => x.pid === pid);
@@ -221,4 +223,26 @@ export async function pruneStale(msg) {
     }
     if (changed) await ctx().saveChat();
     return changed;
+}
+
+// ---------- body profiles ----------
+// Sex/body shape is a property of the character (or persona), not of a chat, so
+// it lives in extension settings: profiles['c:<avatar>'] or profiles['u:<persona name>'].
+
+export function profileKey(member) {
+    return member.isUser ? `u:${ctx().name1}` : member.key;
+}
+
+function descriptionOf(member) {
+    const c = ctx();
+    if (member.isUser) return c.powerUserSettings?.persona_description || '';
+    const ch = c.characters.find(x => 'c:' + x.avatar === member.key);
+    return [ch?.description, ch?.personality, ch?.data?.description].filter(Boolean).join('\n');
+}
+
+/** { sex, guessed } for a scene member: the saved choice, or a guess from their description. */
+export function memberSex(member, profiles = {}) {
+    const saved = profiles[profileKey(member)]?.sex;
+    if (saved) return { sex: saved, guessed: false };
+    return { sex: guessSex(descriptionOf(member)), guessed: true };
 }

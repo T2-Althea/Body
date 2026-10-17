@@ -1,8 +1,8 @@
 {
     "id": "human",
     "name": "Human",
-    "version": 1,
-    "notes": "Parts with \"sided\": true are expanded into left_ and right_ copies (children included). \"region\": true marks the zoom-level groups. \"sensitive\": true parts can be hidden from display without being untracked. \"mannequin\" holds the drawing: shapes in a 100x215 box, each tied to a region id. \"sided\" shapes are drawn on the viewer's right and mirrored; in the front view the viewer's right is the character's left, in the back view it is their right.",
+    "version": 2,
+    "notes": "Parts with \"sided\": true are expanded into left_ and right_ copies (children included). \"region\": true marks the zoom-level groups. \"sensitive\": true parts can be hidden from display without being untracked. \"mannequin\" holds the drawing: shapes in a 100x215 box, each tied to a region id. \"sided\" shapes are drawn on the viewer's right and mirrored; in the front view the viewer's right is the character's left, in the back view it is their right. \"sex\": \"female\"|\"male\" limits a part to bodies set to that sex (bodies set to Unspecified show both); children of a \"sensitive\" part are sensitive too. \"mannequin.variants\" holds alternative shapes (by region) for a body shape, e.g. \"feminine\".",
     "parts": [
         {
             "id": "head",
@@ -91,7 +91,14 @@
                 {
                     "id": "breast",
                     "name": "Breast",
-                    "sided": true
+                    "sided": true,
+                    "children": [
+                        {
+                            "id": "nipple",
+                            "name": "Nipple",
+                            "sensitive": true
+                        }
+                    ]
                 }
             ]
         },
@@ -171,7 +178,56 @@
                 {
                     "id": "genitals",
                     "name": "Genitals",
-                    "sensitive": true
+                    "sensitive": true,
+                    "children": [
+                        {
+                            "id": "vulva",
+                            "name": "Vulva",
+                            "sex": "female"
+                        },
+                        {
+                            "id": "clitoris",
+                            "name": "Clitoris",
+                            "sex": "female"
+                        },
+                        {
+                            "id": "vagina",
+                            "name": "Vagina",
+                            "sex": "female"
+                        },
+                        {
+                            "id": "uterus",
+                            "name": "Uterus",
+                            "sex": "female"
+                        },
+                        {
+                            "id": "ovary",
+                            "name": "Ovary",
+                            "sided": true,
+                            "sex": "female"
+                        },
+                        {
+                            "id": "penis",
+                            "name": "Penis",
+                            "sex": "male"
+                        },
+                        {
+                            "id": "scrotum",
+                            "name": "Scrotum",
+                            "sex": "male"
+                        },
+                        {
+                            "id": "testicle",
+                            "name": "Testicle",
+                            "sided": true,
+                            "sex": "male"
+                        },
+                        {
+                            "id": "prostate",
+                            "name": "Prostate",
+                            "sex": "male"
+                        }
+                    ]
                 }
             ]
         },
@@ -367,6 +423,86 @@
                 "sided": true,
                 "d": "M53 197 L60 197 L63 205 C63 208 61 209 58 209 L52 209 C51 205 52 200 53 197 Z"
             }
-        ]
+        ],
+        "variants": {
+            "feminine": {
+                "front": [
+                    {
+                        "region": "chest",
+                        "d": "M45 37 L55 37 C60 37 64 38 65 42 L65 52 C65 59 61 63 57 63 C54 63 51 61 50 59 C49 61 46 63 43 63 C39 63 35 59 35 52 L35 42 C36 38 40 37 45 37 Z"
+                    },
+                    {
+                        "region": "abdomen",
+                        "d": "M38 64 L62 64 C61 72 60 78 61 88 L39 88 C40 78 39 72 38 64 Z"
+                    },
+                    {
+                        "region": "neck",
+                        "d": "M46 30 L54 30 L55 36 L45 36 Z"
+                    },
+                    {
+                        "region": "pelvis",
+                        "d": "M39 89 L61 89 C65 93 67 99 66 105 L57 109 L50 103 L43 109 L34 105 C33 99 35 93 39 89 Z"
+                    },
+                    {
+                        "region": "arm",
+                        "sided": true,
+                        "d": "M67 41 C71 43 72 49 72 57 L74 78 L76 97 L71 98 L68 79 L65 61 Z"
+                    },
+                    {
+                        "region": "hand",
+                        "sided": true,
+                        "d": "M71 100 L77 99 C79 103 79 109 76 113 C73 115 71 113 70 109 Z"
+                    },
+                    {
+                        "region": "leg",
+                        "sided": true,
+                        "d": "M51 107 L57 110 L65 106 C66 122 64 136 61 150 L59 195 L53 195 L52 150 C51 136 50 121 51 107 Z"
+                    },
+                    {
+                        "region": "foot",
+                        "sided": true,
+                        "d": "M53 197 L59 197 L61 204 C61 207 60 208 57 208 L52 208 C51 204 52 200 53 197 Z"
+                    }
+                ],
+                "back": [
+                    {
+                        "region": "upper_back",
+                        "d": "M45 37 L55 37 C60 37 64 38 65 42 L63 63 L37 63 L35 42 C36 38 40 37 45 37 Z"
+                    },
+                    {
+                        "region": "lower_back",
+                        "d": "M38 64 L62 64 C61 72 60 78 61 88 L39 88 C40 78 39 72 38 64 Z"
+                    },
+                    {
+                        "region": "neck",
+                        "d": "M46 30 L54 30 L55 36 L45 36 Z"
+                    },
+                    {
+                        "region": "pelvis",
+                        "d": "M39 89 L61 89 C65 93 67 99 66 105 L57 109 L50 103 L43 109 L34 105 C33 99 35 93 39 89 Z"
+                    },
+                    {
+                        "region": "arm",
+                        "sided": true,
+                        "d": "M67 41 C71 43 72 49 72 57 L74 78 L76 97 L71 98 L68 79 L65 61 Z"
+                    },
+                    {
+                        "region": "hand",
+                        "sided": true,
+                        "d": "M71 100 L77 99 C79 103 79 109 76 113 C73 115 71 113 70 109 Z"
+                    },
+                    {
+                        "region": "leg",
+                        "sided": true,
+                        "d": "M51 107 L57 110 L65 106 C66 122 64 136 61 150 L59 195 L53 195 L52 150 C51 136 50 121 51 107 Z"
+                    },
+                    {
+                        "region": "foot",
+                        "sided": true,
+                        "d": "M53 197 L59 197 L61 204 C61 207 60 208 57 208 L52 208 C51 204 52 200 53 197 Z"
+                    }
+                ]
+            }
+        }
     }
 }

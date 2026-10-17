@@ -19,13 +19,19 @@ Requires SillyTavern 1.19.0 or newer.
 - The HUD hides while SillyTavern's own panel on that side is open (the character
   list on the right; AI Response Configuration or World Info on the left) and
   comes back when it closes. On phones it opens over the chat.
-- Pick a character at the top. The mannequin shows front and back; regions are
+- Pick a character at the top. Under the names, **Body** (Female / Male /
+  Unspecified) sets the mannequin's shape and which sex-specific parts are
+  listed; it's guessed from the character card's pronouns until you pick, and
+  remembered per character and per persona.
+- The mannequin shows front and back; regions are
   tinted by their worst condition (yellow minor → dark red critical), missing parts
   are dashed. Hover a region for its conditions; click it to zoom into its parts,
   and press **+** next to any part to add a condition there.
 - **+ Condition** adds anything on a body part (wounds, numbness, rashes,
   swelling…), a missing part, a whole-body state (wet, cold, exhausted…;
-  optionally limited to an area like "left foot"), or a mental condition.
+  optionally limited to an area like "left foot"), a mental condition, or a
+  **mark** (tattoo, body paint, brand…; permanent, or temporary and fading
+  after a few days).
   **Temperature** sets body temperature.
 - Changes you make by hand are saved on the latest message. Deleting that message
   removes them; swiping between replies keeps them.
@@ -101,7 +107,8 @@ Seraphina:
 
 ## Settings (Extensions → Body HUD)
 - Panel side (right or left), °C or °F, show or hide the mannequin, hide
-  sensitive parts from the part list and zoomed views, realism level.
+  sensitive parts from the part list and zoomed views, realism level, include
+  marks in the note.
 - Note: on/off; where it goes (in chat at a depth, default just above your latest
   message; or before or after the main prompt); sent as system, user or assistant;
   max length in tokens (default 200; the least important lines are cut first);

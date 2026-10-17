@@ -109,7 +109,14 @@ export function buildNote(members, bodies, index, opts, countTokens) {
         if (!body) return;
         const conds = [...body.conditions.values()].filter(c => !isTrivial(c));
         const states = conds.filter(c => c.kind === 'state');
-        for (const c of conds.filter(c => c.kind !== 'state')) {
+        const marks = conds.filter(c => c.kind === 'mark');
+        // Marks are appearance, not capability: one short line, first to go when space is tight.
+        if (marks.length && opts.marksInNote !== false) {
+            const list = marks.map(c => `${lc(c.type)}${c.details ? ` (${lc(c.details)})` : ''} on the ${lc(partName(c.part))}${c.hidden ? ' (hidden)' : ''}`);
+            const effects = marks.map(c => c.effect).filter(Boolean).map(endDot);
+            candidates.push({ mi, prio: 10, text: `Marks: ${list.join('; ')}.${effects.length ? ' ' + effects.join(' ') : ''}` });
+        }
+        for (const c of conds.filter(c => c.kind !== 'state' && c.kind !== 'mark')) {
             candidates.push({ mi, ...conditionLine(c, partName, opts) });
         }
         const wb = wholeBodyLine(states, body.temp, opts, partName);

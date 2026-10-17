@@ -61,7 +61,16 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
       `skipDays` (manual: src 'timeskip' on all swipes; from the story: the
       detection `time_passes` proposal, written to its message as 'review').
       `undoSkip` removes a whole skip. Grounded+ flags untreated bleeding in the note.
-- [ ] M7 Template editor and NPC bodies.
+- [x] Body profile + marks (between M6 and M7, user request): per-character/persona
+      sex (Female/Male/Unspecified) saved in `settings.profiles` (`profileKey`),
+      guessed from description pronouns until set. Drives the mannequin variant
+      (`mannequin.variants.feminine`) and part filtering (`part.sex`, `partShown`).
+      Template v2 adds nipples and sex-specific genital parts (sensitive, inherited).
+      New kind `mark` (tattoo/paint/brand; status permanent|temporary; temporary
+      fades in 3 days on time skips; one low-priority "Marks:" note line, optional).
+- [ ] M7 Template editor and NPC bodies. Include **race presets** (user request):
+      elf (pointed ears), horned, tailed, winged… as template add-ons that add
+      parts and mannequin shapes (ears, horns, tail, wings) on top of the human base.
 
 ## Extras (user requests, after M7)
 - **Emotions / mood:** a Mood line per character with a quick picker (builds on

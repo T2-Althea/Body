@@ -480,3 +480,29 @@
     display: flex;
     margin: 2px 0;
 }
+
+/* ---------- body profile, marks ---------- */
+
+.bh-profile {
+    flex-basis: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9em;
+}
+
+.bh-profile .text_pole {
+    width: auto;
+    margin: 0;
+    padding: 1px 4px;
+}
+
+.bh-guess {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+.bh-zchip.bh-sev-mark {
+    border-left-style: dotted;
+    border-left-color: var(--SmartThemeQuoteColor);
+}

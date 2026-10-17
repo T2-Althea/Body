@@ -12,7 +12,11 @@ export const KINDS = {
     state: 'Whole-body state',
     mind_lasting: 'Mind: lasting condition',
     mind_current: 'Mind: current state',
+    mark: 'Mark (tattoo, body paint, brand…)',
 };
+// How long a mark lasts.
+export const MARK_DURATIONS = { permanent: 'Permanent', temporary: 'Temporary (fades in a few days)' };
+export const SEXES = { unspecified: 'Unspecified', female: 'Female', male: 'Male' };
 export const BODY_PART = '_body';
 export const MIND_PART = 'brain';
 
@@ -30,7 +34,7 @@ export function expandTemplate(template) {
     const parts = new Map();
     const order = [];
 
-    function visit(node, parentId, prefix, depth, regionId) {
+    function visit(node, parentId, prefix, depth, regionId, parentSensitive = false) {
         const sides = node.sided && !prefix ? ['left', 'right'] : [null];
         for (const side of sides) {
             const p = side ? `${side}_` : prefix;
@@ -42,12 +46,13 @@ export function expandTemplate(template) {
                 id, name, parentId, depth,
                 region: !!node.region,
                 regionId: region,
-                sensitive: !!node.sensitive,
+                sensitive: !!node.sensitive || parentSensitive,
+                sex: node.sex || null,
                 children: [],
             });
             order.push(id);
             if (parentId && parts.has(parentId)) parts.get(parentId).children.push(id);
-            for (const child of node.children || []) visit(child, id, p, depth + 1, region);
+            for (const child of node.children || []) visit(child, id, p, depth + 1, region, !!node.sensitive || parentSensitive);
         }
     }
     for (const root of template.parts || []) visit(root, null, '', 0, null);
@@ -140,4 +145,25 @@ export function fingerprint(text) {
         h = Math.imul(h, 16777619);
     }
     return (h >>> 0).toString(36);
+}
+
+/** Whether a part is shown for a body of this sex (parts for the other sex are hidden). */
+export function partShown(part, { sex = 'unspecified', hideSensitive = false } = {}) {
+    if (!part) return false;
+    if (hideSensitive && part.sensitive) return false;
+    return !part.sex || sex === 'unspecified' || part.sex === sex;
+}
+
+/**
+ * Guesses a body's sex from pronouns in a character or persona description.
+ * Returns 'unspecified' unless one set clearly dominates.
+ */
+export function guessSex(text) {
+    const s = String(text ?? '');
+    const count = re => (s.match(re) || []).length;
+    const she = count(/\b(she|her|hers|herself)\b/gi);
+    const he = count(/\b(he|him|his|himself)\b/gi);
+    if (she >= 3 && she >= he * 2) return 'female';
+    if (he >= 3 && he >= she * 2) return 'male';
+    return 'unspecified';
 }
