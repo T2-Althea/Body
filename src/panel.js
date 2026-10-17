@@ -58,6 +58,12 @@ export function initPanel(options) {
         .on('click', '.bh-member', function () { selected = $(this).attr('data-key'); form = null; render(); })
         .on('click', '[data-act]', onAction)
         .on('change', '#bh_f_kind', () => updateFormFields());
+    // 'toggle' doesn't bubble, so listen in the capture phase.
+    document.getElementById('body_hud_panel').addEventListener('toggle', e => {
+        if (!e.target.classList?.contains('bh-note')) return;
+        opts.getSettings().notePreviewOpen = e.target.open;
+        opts.saveSettings();
+    }, true);
 
     applyLayout();
     render();
@@ -114,7 +120,7 @@ export function render() {
     $('#body_hud_tab').toggleClass('bh-alert', members.some(m => isAffected(bodies.get(m.key))));
     membersEl.html(members.map(m => `
         <div class="bh-member menu_button ${m.key === selected ? 'bh-active' : ''}" data-key="${esc(m.key)}">
-            ${esc(m.name)}${m.isUser ? ' <small>(you)</small>' : ''}${isAffected(bodies.get(m.key)) ? '<span class="bh-dot"></span>' : ''}
+            ${esc(m.name)}${m.isUser ? ' <small>(you)</small>' : ''}${m.muted ? ' <small>(muted)</small>' : ''}${isAffected(bodies.get(m.key)) ? '<span class="bh-dot"></span>' : ''}
         </div>`).join(''));
 
     const body = bodies.get(selected) || { conditions: new Map(), temp: null };
@@ -167,8 +173,27 @@ export function render() {
         <div class="menu_button" data-act="temp"><i class="fa-solid fa-temperature-half"></i> Temperature</div>
     </div>`;
 
+    html += renderNotePreview();
+
     content.html(html);
     if (form && form.mode !== 'temp') updateFormFields();
+}
+
+// Exactly what will be sent before the next reply, for every body in the scene.
+function renderNotePreview() {
+    const s = opts.getSettings();
+    const note = opts.getNote();
+    let inner;
+    if (!s.inject) inner = '<div class="bh-empty">Sending is turned off in the extension settings.</div>';
+    else if (!note.text) inner = '<div class="bh-empty">Nothing. Everyone in the scene is fine, so no note is sent.</div>';
+    else {
+        inner = `<pre class="bh-note-text">${esc(note.text)}</pre>`;
+        if (note.omitted) inner += `<div class="bh-cond-meta">${note.omitted} less important line${note.omitted > 1 ? 's' : ''} left out to stay within the length limit.</div>`;
+    }
+    const size = s.inject && note.text ? ` <small>(~${note.tokens} tokens)</small>` : '';
+    return `<details class="bh-note bh-section" ${s.notePreviewOpen ? 'open' : ''}>
+        <summary class="bh-section-title">What the AI sees${size}</summary>${inner}
+    </details>`;
 }
 
 function isDescendant(index, id, ancestor) {
@@ -341,5 +366,6 @@ async function onAction(e) {
     // straight away; the save finishing later can't clobber a form opened meanwhile.
     const saving = ops ? writeManualOps(ops) : null;
     render();
+    if (ops) opts.onStateChange?.();
     await saving;
 }

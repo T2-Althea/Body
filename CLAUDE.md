@@ -18,7 +18,8 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
   `chatMetadata.body_hud` as a baseline. The user's body key is `user`;
   characters are `c:<avatar filename>`.
 - Code layout: `src/model.js` (pure: templates, ops, replay; unit-tested),
-  `src/store.js` (chat read/write), `src/panel.js` (side panel UI), `index.js` (wiring, settings).
+  `src/note.js` (pure: the AI's note; unit-tested), `src/store.js` (chat read/write),
+  `src/panel.js` (side panel UI), `index.js` (wiring, settings, injection).
 - The side panel uses viewport units (`dvh`), not `%`: ST's mobile layout
   transforms `<html>`, which breaks `%`-based fixed positioning.
 - A healthy character injects nothing. The note has a token budget.
@@ -28,7 +29,8 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
 ## Milestones
 - [x] M0 Orientation: extension system, `message.extra` and swipes, injection.
 - [x] M1 Data model and templates; manual editing in a list view (in the side panel).
-- [ ] M2 Injection: the status note.
+- [x] M2 Injection: the status note (`src/note.js`, set on every state change and
+      in the `bodyHudInterceptor` generate interceptor before each generation).
 - [ ] M3 Mannequin view.
 - [ ] M4 Automatic detection, review queue, undo.
 - [ ] M5 Swipe/branch handling (fingerprints, regen clearing).

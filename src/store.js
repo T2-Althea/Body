@@ -12,7 +12,7 @@ const ctx = () => SillyTavern.getContext();
 /**
  * The bodies shown for the current chat: the user's persona, the character, or
  * every group member.
- * @returns {{ key: string, name: string, isUser: boolean }[]}
+ * @returns {{ key: string, name: string, isUser: boolean, muted?: boolean }[]}
  */
 export function getSceneMembers() {
     const c = ctx();
@@ -21,7 +21,9 @@ export function getSceneMembers() {
         const group = c.groups.find(g => g.id === c.groupId);
         for (const avatar of group?.members || []) {
             const ch = c.characters.find(x => x.avatar === avatar);
-            if (ch) members.push({ key: 'c:' + avatar, name: ch.name, isUser: false });
+            // Muted members stay editable but are left out of the AI's note.
+            const muted = !!group.disabled_members?.includes(avatar);
+            if (ch) members.push({ key: 'c:' + avatar, name: ch.name, isUser: false, muted });
         }
     } else if (c.characterId !== undefined && c.characters[c.characterId]) {
         const ch = c.characters[c.characterId];

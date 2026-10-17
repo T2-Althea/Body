@@ -272,3 +272,16 @@
     flex: 1;
     min-width: 0;
 }
+
+.bh-note summary {
+    cursor: pointer;
+}
+
+.bh-note-text {
+    white-space: pre-wrap;
+    font-size: 0.85em;
+    background: var(--black30a);
+    border-radius: 4px;
+    padding: 6px;
+    margin: 4px 0;
+}

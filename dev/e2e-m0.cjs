@@ -1,13 +1,12 @@
 // M0 end-to-end check against a running SillyTavern + fake backend.
-// Verifies: the extension loads; the probe note reaches the outgoing prompt and
-// disappears when turned off; and how message.extra behaves across swipes.
+// Verifies: the extension loads, and how message.extra behaves across swipes
+// (the injection checks from M0 now live in e2e-m2.cjs).
 // Usage: node dev/e2e-m0.cjs <st-url> <fake-llm-request-log>
 const fs = require('fs');
 const { chromium } = require('playwright');
 
 const url = process.argv[2] || 'http://127.0.0.1:8000/';
 const reqLog = process.argv[3];
-const PROBE = 'Body HUD probe';
 
 const lastRequest = () => {
     const lines = fs.readFileSync(reqLog, 'utf8').trim().split('\n');
@@ -55,25 +54,10 @@ const check = (name, ok, detail = '') => {
         await page.waitForFunction(() => !document.querySelector('#send_but')?.classList.contains('displayNone'), null, { timeout: 30000 });
         await page.waitForTimeout(500);
     };
-    const setProbe = on => page.evaluate(v => { const el = document.querySelector('#body_hud_probe'); el.checked = v; el.dispatchEvent(new Event('change')); }, on);
     const lastExtra = () => page.evaluate(() => { const c = SillyTavern.getContext().chat; const m = c[c.length - 1]; return { swipe: m.swipe_id ?? 0, stamp: m.extra?.body_hud_probe ?? null }; });
 
-    // 1. Injection on.
-    await setProbe(true);
+    // Need an AI reply to swipe.
     await send('Hello there.');
-    const withProbe = JSON.stringify(lastRequest().messages);
-    check('probe note is in the prompt when enabled', withProbe.includes(PROBE));
-    check('probe note appears exactly once', withProbe.split(PROBE).length - 1 === 1);
-
-    // 2. Second message: still exactly one copy (no pile-up).
-    await send('How are you?');
-    const second = JSON.stringify(lastRequest().messages);
-    check('no pile-up after another reply', second.split(PROBE).length - 1 === 1);
-
-    // 3. Injection off.
-    await setProbe(false);
-    await send('Okay.');
-    check('probe note gone when disabled', !JSON.stringify(lastRequest().messages).includes(PROBE));
 
     // 4. message.extra across swipes.
     await page.evaluate(() => {
