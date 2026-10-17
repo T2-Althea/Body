@@ -618,6 +618,7 @@ async function onAction(e) {
         case 'approve': { const p = findPending(); if (p) await afterStore(resolvePending(pIndex, pid, opsFor(p, p.op))); return; }
         case 'side': { const p = findPending(); if (p) await afterStore(resolvePending(pIndex, pid, opsFor(p, withSide(p, $(this).attr('data-side')).op))); return; }
         case 'npc-new': form = { mode: 'npc', scroll: true }; render(); return;
+        case 'edit-features': opts.editFeatures?.(); return;
         case 'npc-save': {
             const name = String($('#bh_n_name').val() || '').trim();
             if (!name) { toastr.warning('Give the NPC a name.'); return; }
@@ -827,6 +828,7 @@ function renderRace(m) {
     return `<div class="bh-profile bh-race">
         <span>Race</span>
         <select id="bh_p_race" class="text_pole">${presetOpts}</select>
+        <span class="fa-solid fa-pen bh-iconbtn" data-act="edit-features" title="Make your own races and features"></span>
         <span class="bh-features">${boxes}</span>
     </div>`;
 }

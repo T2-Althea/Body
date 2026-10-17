@@ -87,3 +87,28 @@ test('features: merged into the template, shown only for bodies that have them',
     const elf = viewShapes(m, 'front', null, ['pointed_ears']).filter(s => s.region === 'head');
     assert.equal(elf.length, 3, 'two ear shapes belong to the head itself');
 });
+
+test('custom features from the editor become real parts and borrowed shapes', async () => {
+    const { customFeatureFile, mergeFeatureFiles, withFeatures } = await import('../src/model.js');
+    const builtin = JSON.parse(readFileSync(new URL('../templates/addons.json', import.meta.url)));
+    const custom = {
+        features: [
+            { id: 'c_antennae', name: 'Antenna', parent: 'head', sided: true, parts: ['Antenna base', 'Antenna tip'], drawing: 'horns' },
+            { id: 'c_stinger', name: 'Stinger', parent: 'pelvis', sided: false, parts: [], drawing: 'tail' },
+            { id: 'c_gills', name: 'Gills', parent: 'neck', sided: true, parts: [], drawing: '' },
+        ],
+        presets: [{ id: 'cp_insect', name: 'Insectoid', features: ['c_antennae', 'c_stinger'] }],
+    };
+    const merged = mergeFeatureFiles(builtin, customFeatureFile(custom, builtin));
+    const full = expandTemplate(withFeatures(tpl, merged));
+    assert.equal(full.parts.get('left_c_antennae').name, 'Left antenna');
+    assert.equal(full.parts.get('right_c_antennae_antenna_tip').name, 'Right antenna tip');
+    assert.equal(full.parts.get('c_stinger').parentId, 'pelvis');
+    assert.equal(full.parts.get('left_c_gills').parentId, 'neck');
+    assert.ok(full.presets.some(p => p.name === 'Insectoid'));
+    const m = withFeatures(tpl, merged).mannequin;
+    const front = viewShapes(m, 'front', null, ['c_antennae']);
+    assert.ok(front.some(s => s.region === 'left_c_antennae') && front.some(s => s.region === 'right_c_antennae'), 'borrowed horn shape, mirrored');
+    assert.ok(viewShapes(m, 'back', null, ['c_stinger']).some(s => s.region === 'c_stinger'), 'borrowed tail shape');
+    assert.equal(viewShapes(m, 'back', null, ['c_gills']).some(s => /gills/.test(s.region)), false, 'no drawing: listed only');
+});

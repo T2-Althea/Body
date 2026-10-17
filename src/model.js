@@ -224,3 +224,37 @@ export function withFeatures(template, featureFile) {
     t.presets = featureFile?.presets || [];
     return t;
 }
+
+const slug = s => String(s ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+/**
+ * Turns the user's custom features (from the editor) into the same format as
+ * templates/addons.json. A custom feature is
+ *   { id, name, parent, sided, parts: ['Base', 'Tip'], drawing: '<built-in feature id>' | '' }
+ * and borrows the drawing of a built-in feature.
+ */
+export function customFeatureFile(custom, builtin) {
+    const features = (custom?.features || []).filter(f => f.id && f.name && f.parent).map(f => {
+        const children = (f.parts || []).map(p => String(p).trim()).filter(Boolean)
+            .map(p => ({ id: `${f.id}_${slug(p)}`, name: p }));
+        const source = (builtin?.features || []).find(b => b.id === f.drawing);
+        const shapes = (source?.shapes || []).map(s => s.keepRegion
+            ? { ...s }
+            : { ...s, region: f.id, sided: !!f.sided });
+        return {
+            id: f.id,
+            name: f.name,
+            parts: [{ parent: f.parent, part: { id: f.id, name: f.name, sided: !!f.sided, region: true, children } }],
+            shapes,
+        };
+    });
+    return { features, presets: (custom?.presets || []).filter(p => p.id && p.name) };
+}
+
+/** Built-in features and presets followed by the user's own. */
+export function mergeFeatureFiles(...files) {
+    return {
+        features: files.flatMap(f => f?.features || []),
+        presets: files.flatMap(f => f?.presets || []),
+    };
+}

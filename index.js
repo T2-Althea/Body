@@ -2,7 +2,8 @@
 // Everything goes through SillyTavern.getContext() so the extension works no
 // matter which folder it is installed into.
 
-import { expandTemplate, withFeatures } from './src/model.js';
+import { openFeatureEditor } from './src/editor.js';
+import { customFeatureFile, expandTemplate, mergeFeatureFiles, withFeatures } from './src/model.js';
 import { buildNote, estimateTokens } from './src/note.js';
 import { applyLayout, initPanel, render } from './src/panel.js';
 import { initRunner, onNewMessage } from './src/runner.js';
@@ -25,6 +26,7 @@ const defaultSettings = Object.freeze({
     budget: 200,      // tokens
     tempInNote: 'abnormal',
     notePreviewOpen: false,
+    customFeatures: { features: [], presets: [] }, // made in the races & features editor
     realism: 'grounded',
     profiles: {},           // body sex per character/persona: { 'c:<avatar>' | 'u:<persona>': { sex } }
     marksInNote: true,      // tattoos/paint in the AI's note (one short line, cut first)    // cinematic | grounded | simulation (time skips; untreated flag in the note)
@@ -39,6 +41,8 @@ const defaultSettings = Object.freeze({
 });
 
 let templateIndex = null;
+let baseTemplate = null;
+let builtinFeatures = null;
 
 function ctx() {
     return SillyTavern.getContext();
@@ -55,11 +59,28 @@ function saveSettings() {
 }
 
 async function loadTemplate() {
-    const [base, features] = await Promise.all([
+    [baseTemplate, builtinFeatures] = await Promise.all([
         fetch(new URL('./templates/human.json', import.meta.url)).then(r => r.json()),
         fetch(new URL('./templates/addons.json', import.meta.url)).then(r => r.json()).catch(() => null),
     ]);
-    templateIndex = expandTemplate(withFeatures(base, features));
+    rebuildTemplate();
+}
+
+// The template is the base body plus every built-in and custom feature.
+function rebuildTemplate() {
+    if (!baseTemplate) return;
+    const custom = customFeatureFile(getSettings().customFeatures, builtinFeatures);
+    templateIndex = expandTemplate(withFeatures(baseTemplate, mergeFeatureFiles(builtinFeatures, custom)));
+}
+
+function editFeatures() {
+    openFeatureEditor({
+        getSettings,
+        saveSettings,
+        getIndex: () => templateIndex,
+        builtin: () => builtinFeatures,
+        onSaved: () => { rebuildTemplate(); refresh(); },
+    });
 }
 
 /** The note for the current chat, or an empty one. */
@@ -126,6 +147,10 @@ function renderSettings() {
                         <option value="C" ${sel('C', s.tempUnit)}>°C</option>
                         <option value="F" ${sel('F', s.tempUnit)}>°F</option>
                     </select>
+                </div>
+                <div class="bh-setting-row">
+                    <span>Races and body features</span>
+                    <div id="body_hud_edit_features" class="menu_button" title="Make your own races (sets of features) and features (horns, gills, extra limbs…)"><i class="fa-solid fa-pen"></i> Edit</div>
                 </div>
                 <label class="checkbox_label">
                     <input type="checkbox" id="body_hud_mannequin" ${s.showMannequin ? 'checked' : ''}>
@@ -239,6 +264,7 @@ function renderSettings() {
     bind('#body_hud_mannequin', 'showMannequin', el => el.checked);
     bind('#body_hud_realism', 'realism', el => el.value);
     bind('#body_hud_marks', 'marksInNote', el => el.checked);
+    $('#body_hud_edit_features').on('click', () => editFeatures());
     bind('#body_hud_inject', 'inject', el => el.checked);
     bind('#body_hud_position', 'position', el => Number(el.value));
     bind('#body_hud_depth', 'depth', num(0, 50));
@@ -302,6 +328,7 @@ jQuery(async () => {
         getIndex: () => templateIndex,
         getNote: computeNote,
         onStateChange: updateInjection,
+        editFeatures,
     });
     initRunner({
         getSettings,

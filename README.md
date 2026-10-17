@@ -4,7 +4,7 @@ A SillyTavern extension that keeps track of what has physically happened to the
 characters in a scene (wounds, missing limbs, being soaked and freezing, exhaustion)
 and will remind the AI with a short note before each reply.
 
-**Status: early development (M7 in progress).** You record conditions by hand in the HUD, and
+**Status: all planned milestones done (M0–M7); extras next.** You record conditions by hand in the HUD, and
 a short status note is sent to the AI before each reply. Automatic detection comes
 later. See `docs/concept.md` for the plan.
 
@@ -27,6 +27,12 @@ Requires SillyTavern 1.19.0 or newer.
   Winged) or any mix of features: pointed ears, animal ears, horns, tail, wings.
   Features add their own parts (Left horn, Tail tip, Right wing…) and shapes on
   the mannequin. Saved per character and per persona.
+- The ✎ next to Race (or **Races and body features → Edit** in the settings) opens
+  an editor for your own races and features: name a feature, attach it (head,
+  neck, back, arm…), choose left-and-right or single, list its smaller parts,
+  and borrow a built-in drawing (like horns, like a tail…) or keep it listed
+  only. The **Share** box copies your races and features as text, or loads
+  someone else's.
 - **+ NPC** adds someone who isn't a SillyTavern character (the guard, a wolf),
   with a body and race. NPCs are in the AI's note while in the scene; **Leaves the
   scene** takes them out but keeps their body, and they can be brought back. NPCs
@@ -130,4 +136,6 @@ Seraphina:
 ## Body templates
 `templates/human.json` defines the parts tree and the mannequin drawing. Parts
 marked `"sided": true` get left and right copies automatically; so do mannequin
-shapes, which are drawn once and mirrored.
+shapes, which are drawn once and mirrored. `templates/addons.json` holds the
+built-in features and races; your own (from the editor) are stored in the
+extension settings.

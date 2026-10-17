@@ -557,3 +557,57 @@
     gap: 3px;
     cursor: pointer;
 }
+
+/* ---------- races & features editor ---------- */
+
+.bh-editor {
+    text-align: left;
+}
+
+.bh-editor h3 {
+    margin: 12px 0 4px;
+}
+
+.bh-e-help {
+    opacity: 0.75;
+    font-size: 0.9em;
+    margin: 2px 0 6px;
+}
+
+.bh-e-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--black30a);
+}
+
+.bh-e-row .text_pole {
+    width: auto;
+    margin: 0;
+}
+
+.bh-e-row label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.bh-e-builtin {
+    opacity: 0.75;
+    font-size: 0.9em;
+    margin-bottom: 6px;
+}
+
+.bh-editor .menu_button {
+    display: inline-flex;
+    white-space: nowrap;
+    gap: 4px;
+}
+
+.bh-e-json {
+    width: 100%;
+    font-family: monospace;
+    font-size: 0.85em;
+}
