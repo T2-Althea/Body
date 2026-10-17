@@ -13,5 +13,6 @@ node Body/dev/e2e-m0.cjs http://127.0.0.1:8000/ requests.jsonl   # needs playwri
 node Body/dev/e2e-m1.cjs http://127.0.0.1:8000/ requests.jsonl [screenshot-dir]
 node Body/dev/e2e-m2.cjs http://127.0.0.1:8000/ requests.jsonl [screenshot-dir]
 node Body/dev/e2e-m3.cjs http://127.0.0.1:8000/ requests.jsonl [screenshot-dir]
+node Body/dev/e2e-m4.cjs http://127.0.0.1:8000/ requests.jsonl [screenshot-dir]
 node --test Body/tests/*.test.mjs                                # unit tests, no ST needed
 ```

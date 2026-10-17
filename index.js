@@ -5,6 +5,7 @@
 import { expandTemplate } from './src/model.js';
 import { buildNote, estimateTokens } from './src/note.js';
 import { applyLayout, initPanel, render } from './src/panel.js';
+import { initRunner, onNewMessage } from './src/runner.js';
 import { buildBodies, getSceneMembers, hasOpenChat } from './src/store.js';
 
 const MODULE = 'body_hud';
@@ -24,6 +25,12 @@ const defaultSettings = Object.freeze({
     budget: 200,      // tokens
     tempInNote: 'abnormal',
     notePreviewOpen: false,
+    // Automatic detection.
+    detectMode: 'ask',      // off | manual (button only) | ask (review first) | auto (apply, with undo)
+    detectUser: true,       // also check the user's own messages
+    detectPrefilter: true,  // skip messages without injury/state words
+    detectContext: true,    // include the previous message for context
+    modelProfile: '',       // Connection Profile id; empty = the chat's current model
 });
 
 let templateIndex = null;
@@ -151,6 +158,33 @@ function renderSettings() {
                     </select>
                 </div>
                 <small class="body-hud-muted">The note's exact text is shown at the bottom of the HUD panel.</small>
+                <hr>
+                <b>Automatic detection</b>
+                <div class="bh-setting-row">
+                    <span>Mode</span>
+                    <select id="body_hud_detect_mode" class="text_pole">
+                        <option value="ask" ${sel('ask', s.detectMode)}>Ask me (review each change)</option>
+                        <option value="auto" ${sel('auto', s.detectMode)}>Apply automatically (with undo)</option>
+                        <option value="manual" ${sel('manual', s.detectMode)}>Only when I press Scan</option>
+                        <option value="off" ${sel('off', s.detectMode)}>Off</option>
+                    </select>
+                </div>
+                <div class="bh-setting-row" title="Detection and the ✨ suggestions use this. A cheap model is fine.">
+                    <span>Model</span>
+                    <select id="body_hud_profile" class="text_pole"></select>
+                </div>
+                <label class="checkbox_label">
+                    <input type="checkbox" id="body_hud_detect_user" ${s.detectUser ? 'checked' : ''}>
+                    <span>Also check my messages</span>
+                </label>
+                <label class="checkbox_label" title="Messages without words like wound, blood, fell, cold, wet, hungry… are never sent for checking. Saves tokens.">
+                    <input type="checkbox" id="body_hud_prefilter" ${s.detectPrefilter ? 'checked' : ''}>
+                    <span>Skip messages with no injury/state words</span>
+                </label>
+                <label class="checkbox_label">
+                    <input type="checkbox" id="body_hud_detect_ctx" ${s.detectContext ? 'checked' : ''}>
+                    <span>Include the previous message for context</span>
+                </label>
             </div>
         </div>
     </div>`;
@@ -174,6 +208,31 @@ function renderSettings() {
     bind('#body_hud_role', 'role', el => Number(el.value));
     bind('#body_hud_budget', 'budget', num(40, 2000));
     bind('#body_hud_tempnote', 'tempInNote', el => el.value);
+    bind('#body_hud_detect_mode', 'detectMode', el => el.value);
+    bind('#body_hud_detect_user', 'detectUser', el => el.checked);
+    bind('#body_hud_prefilter', 'detectPrefilter', el => el.checked);
+    bind('#body_hud_detect_ctx', 'detectContext', el => el.checked);
+    setupProfileDropdown();
+}
+
+// SillyTavern's own Connection Profile picker; the empty choice means "the chat's model".
+function setupProfileDropdown() {
+    const s = getSettings();
+    const select = $('#body_hud_profile');
+    const relabel = () => select.find('option[value=""]').text('Same as the chat (current model)');
+    try {
+        ctx().ConnectionManagerRequestService.handleDropdown('#body_hud_profile', s.modelProfile, () => {});
+    } catch (e) {
+        // Connection Manager disabled: only the current model is available.
+        select.empty().append('<option value="">Same as the chat (current model)</option>');
+        console.debug('[Body HUD] Connection profiles unavailable', e);
+    }
+    relabel();
+    select.val(s.modelProfile || '');
+    select.on('change', () => {
+        getSettings().modelProfile = String(select.val() || '');
+        saveSettings();
+    });
 }
 
 function refresh() {
@@ -205,6 +264,17 @@ jQuery(async () => {
         getNote: computeNote,
         onStateChange: updateInjection,
     });
+    initRunner({
+        getSettings,
+        getIndex: () => templateIndex,
+        onChange: queueRefresh,
+        openPanel: () => {
+            getSettings().panelOpen = true;
+            saveSettings();
+            applyLayout();
+            render();
+        },
+    });
     updateInjection();
 
     for (const ev of [
@@ -214,5 +284,7 @@ jQuery(async () => {
     ]) {
         if (ev) eventSource.on(ev, queueRefresh);
     }
+    eventSource.on(eventTypes.MESSAGE_RECEIVED, (id, type) => onNewMessage(Number(id), type));
+    eventSource.on(eventTypes.MESSAGE_SENT, id => onNewMessage(Number(id), 'user'));
     console.log('[Body HUD] loaded');
 });

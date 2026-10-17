@@ -239,6 +239,7 @@
 
 .bh-actions .menu_button {
     margin: 0;
+    white-space: nowrap;
 }
 
 .bh-form {
@@ -407,3 +408,62 @@
 .bh-zchip.bh-sev-severe { border-left-color: var(--bh-severe); }
 .bh-zchip.bh-sev-critical { border-left-color: var(--bh-critical); }
 .bh-zchip.bh-sev-missing { border-left-style: dashed; border-left-color: var(--bh-missing); }
+
+/* ---------- detection ---------- */
+
+#body_hud_busy {
+    display: none;
+    margin-left: auto;
+    margin-right: 10px;
+    opacity: 0.7;
+}
+
+.bh-review {
+    border: 1px solid var(--SmartThemeQuoteColor);
+    border-radius: 6px;
+    padding: 6px 8px;
+}
+
+.bh-cond.bh-pending {
+    border-left-color: var(--SmartThemeQuoteColor);
+}
+
+.bh-small {
+    margin: 0;
+    padding: 2px 8px;
+    font-size: 0.85em;
+}
+
+.bh-cond-btns .menu_button.bh-small {
+    margin-right: 2px;
+}
+
+.bh-fill {
+    cursor: pointer;
+    opacity: 0.6;
+    margin: 0 4px;
+    font-size: 0.9em;
+}
+
+.bh-fill:hover {
+    opacity: 1;
+    color: var(--SmartThemeQuoteColor);
+}
+
+.bh-working {
+    pointer-events: none;
+    opacity: 0.35 !important;
+}
+
+.bh-logrow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9em;
+    padding: 2px 0;
+}
+
+.bh-log summary {
+    cursor: pointer;
+}

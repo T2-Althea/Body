@@ -7,6 +7,29 @@ const fs = require('fs');
 const port = Number(process.argv[2] || 5001);
 const logFile = process.argv[3] || 'fake-llm-requests.jsonl';
 let n = 0;
+
+// Canned answers for Body HUD's detection and ✨ fill requests (null = normal chat).
+function taskReply(all) {
+    if (all.includes('[BODY_HUD_TASK:fill]')) {
+        return '```json\n{"effect": "Can\'t put weight on it", "details": "Deep puncture", "cause": "Ambush on the road"}\n```';
+    }
+    if (!all.includes('[BODY_HUD_TASK:detect]')) return null;
+    const text = (all.split(/NEW MESSAGE — [^\n]*:\n/)[1] || '').toLowerCase();
+    const who = 'Seraphina';
+    const changes = [];
+    if (text.includes('heart broke')) return '{"changes": []}';
+    if (text.includes('arrow') && text.includes('thigh')) {
+        changes.push({ action: 'add', character: who, kind: 'injury', part: 'left_thigh', type: 'Arrow wound', severity: 'moderate', bleeding: 'moderate', status: 'fresh', details: 'Arrowhead still in', effect: "Can't run; limps", cause: 'Ambush', hidden: false });
+    }
+    if (/bites?\b.*\bleg/.test(text)) changes.push({ action: 'add', character: who, kind: 'injury', part: 'leg', type: 'Bite', severity: 'minor', bleeding: 'light' });
+    if (text.includes('bandag')) {
+        const id = (all.match(/\[(c\d+)\]/) || [])[1];
+        if (id) changes.push({ action: 'update', character: who, id, changes: { status: 'treated', bleeding: 'none' } });
+    }
+    if (text.includes('soak')) changes.push({ action: 'add', character: who, kind: 'state', type: 'Wet', severity: 'minor' });
+    if (text.includes('fever')) changes.push({ action: 'temperature', character: who, celsius: 38.9 });
+    return 'Here you go:\n' + JSON.stringify({ changes });
+}
 http.createServer((req, res) => {
     let body = '';
     req.on('data', c => (body += c));
@@ -17,11 +40,15 @@ http.createServer((req, res) => {
         }
         if (req.url.endsWith('/chat/completions')) {
             const data = JSON.parse(body || '{}');
-            fs.appendFileSync(logFile, JSON.stringify({ messages: data.messages }) + '\n');
+            const all = (data.messages || []).map(m => String(m.content)).join('\n');
+            const task = taskReply(all);
+            // Extension background tasks go to a separate log, so tests reading the
+            // roleplay requests aren't confused by them.
+            fs.appendFileSync(task ? logFile + '.tasks' : logFile, JSON.stringify({ messages: data.messages }) + '\n');
             n++;
             return res.end(JSON.stringify({
                 id: 'fake-' + n, object: 'chat.completion', model: 'fake-model',
-                choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: `Fake reply number ${n}.` } }],
+                choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: task ?? `Fake reply number ${n}.` } }],
                 usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
             }));
         }

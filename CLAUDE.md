@@ -24,6 +24,8 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
 - The side panel uses viewport units (`dvh`), not `%`: ST's mobile layout
   transforms `<html>`, which breaks `%`-based fixed positioning.
 - A healthy character injects nothing. The note has a token budget.
+- The fake backend (`dev/fake-llm.cjs`) answers detection/fill requests with
+  canned JSON and logs them to `<log>.tasks`, separate from roleplay requests.
 - Test changes end to end with the harness in `dev/` before pushing, plus
   `node --test tests/*.test.mjs`.
 
@@ -35,11 +37,17 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
 - [x] M3 Mannequin view (`src/mannequin.js`; shapes live in the template's
       `mannequin` block). Zoom = parts list per region with "+" per part.
       Also: "Injury" kind relabelled "On a body part"; states take an optional area.
-- [ ] M4 Automatic detection, review queue, undo. Also planned here (user request):
-      ✨ buttons in the condition form that fill Effect/Details/Cause from the
-      filled fields + recent chat, plus a "fill all empty" button; same model/
-      Connection Profile picker as detection; never overwrite typed text.
-- [ ] M5 Swipe/branch handling (fingerprints, regen clearing).
+- [x] M4 Automatic detection, review queue, undo, ✨ fill buttons.
+      `src/detect.js` (pure: prefilter, prompt, JSON → proposals; unit-tested),
+      `src/llm.js` (main model via generateRaw or a Connection Profile; JSON
+      extraction), `src/runner.js` (event wiring, one request at a time; result
+      dropped if its message changed meanwhile). Proposals live in
+      `extra.body_hud.pending` on the source message; detected ops carry
+      `src: 'detect'|'review'`, `fp` and `oid` (undo removes by oid). Detected ops
+      go on the current swipe only; manual ops on all swipes. Greeting
+      (`first_message`) is never auto-checked.
+- [ ] M5 Swipe/branch handling: ignore detected ops/pending whose `fp` doesn't
+      match the message text (edits, inherited swipes); clear them on regen.
 - [ ] M6 Time skips and realism levels.
 - [ ] M7 Template editor and NPC bodies.
 

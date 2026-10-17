@@ -2,7 +2,7 @@
 // (message.extra.body_hud) so they follow deletions and branches; a chat with no
 // messages yet keeps them in chat metadata as a baseline.
 
-import { fingerprint, replay } from './model.js';
+import { fingerprint, newId, replay } from './model.js';
 
 export const EXTRA_KEY = 'body_hud';
 export const USER_KEY = 'user';
@@ -68,7 +68,7 @@ function pushOps(extra, ops, mes) {
  */
 export async function writeManualOps(ops) {
     const c = ctx();
-    const stamped = ops.map(op => ({ ...op, src: 'manual' }));
+    const stamped = ops.map(op => ({ ...op, src: 'manual', oid: newId() }));
     if (!c.chat.length) {
         const meta = c.chatMetadata;
         meta[EXTRA_KEY] = meta[EXTRA_KEY] || { ops: [] };
@@ -87,4 +87,78 @@ export async function writeManualOps(ops) {
         });
     }
     await c.saveChat();
+}
+
+// ---------- detection results ----------
+// Detected changes belong to one specific reply, so they go on the current swipe
+// only (message.extra plus its swipe_info copy), never on the other swipes.
+
+function currentCopies(msg) {
+    msg.extra = msg.extra || {};
+    const copies = [msg.extra];
+    const info = Array.isArray(msg.swipe_info) ? msg.swipe_info[msg.swipe_id ?? 0] : null;
+    if (info && info.extra !== msg.extra) {
+        info.extra = info.extra || {};
+        copies.push(info.extra);
+    }
+    return copies.map(extra => extra[EXTRA_KEY] || (extra[EXTRA_KEY] = { v: 1, ops: [] }));
+}
+
+/** Applies detected ops to the message that caused them. */
+export async function writeDetectedOps(msg, ops, fp, src = 'detect') {
+    const stamped = ops.map(op => ({ ...op, src, fp, oid: newId() }));
+    for (const rec of currentCopies(msg)) rec.ops.push(...structuredClone(stamped));
+    await ctx().saveChat();
+}
+
+/** Stores proposals awaiting review on the message that caused them. */
+export async function addPending(msg, proposals, fp) {
+    for (const rec of currentCopies(msg)) {
+        rec.pending = (rec.pending || []).concat(structuredClone(proposals.map(p => ({ ...p, fp }))));
+    }
+    await ctx().saveChat();
+}
+
+/** All proposals waiting for review, oldest first. */
+export function collectPending() {
+    const out = [];
+    ctx().chat.forEach((m, index) => {
+        for (const p of m?.extra?.[EXTRA_KEY]?.pending || []) out.push({ index, ...p });
+    });
+    return out;
+}
+
+/** Approves (op given) or rejects (op null) one proposal. */
+export async function resolvePending(index, pid, op) {
+    const msg = ctx().chat[index];
+    if (!msg) return;
+    let fp = null;
+    for (const rec of currentCopies(msg)) {
+        const p = (rec.pending || []).find(x => x.pid === pid);
+        if (p) fp = p.fp;
+        rec.pending = (rec.pending || []).filter(x => x.pid !== pid);
+    }
+    if (op) await writeDetectedOps(msg, [op], fp, 'review');
+    else await ctx().saveChat();
+}
+
+/** Most recent detected/approved changes, newest first. */
+export function recentDetected(limit = 10) {
+    const out = [];
+    const chat = ctx().chat;
+    for (let i = chat.length - 1; i >= 0 && out.length < limit; i--) {
+        const ops = chat[i]?.extra?.[EXTRA_KEY]?.ops || [];
+        for (let j = ops.length - 1; j >= 0 && out.length < limit; j--) {
+            if (ops[j].src === 'detect' || ops[j].src === 'review') out.push({ index: i, op: ops[j] });
+        }
+    }
+    return out;
+}
+
+/** Removes one recorded op (by oid) from a message: undo. */
+export async function undoOp(index, oid) {
+    const msg = ctx().chat[index];
+    if (!msg) return;
+    for (const rec of currentCopies(msg)) rec.ops = rec.ops.filter(o => o.oid !== oid);
+    await ctx().saveChat();
 }

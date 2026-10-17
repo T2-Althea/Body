@@ -4,7 +4,7 @@ A SillyTavern extension that keeps track of what has physically happened to the
 characters in a scene (wounds, missing limbs, being soaked and freezing, exhaustion)
 and will remind the AI with a short note before each reply.
 
-**Status: early development (M3).** You record conditions by hand in the HUD, and
+**Status: early development (M4).** You record conditions by hand in the HUD, and
 a short status note is sent to the AI before each reply. Automatic detection comes
 later. See `docs/concept.md` for the plan.
 
@@ -29,6 +29,27 @@ Requires SillyTavern 1.19.0 or newer.
   **Temperature** sets body temperature.
 - Changes are saved on the latest message. Deleting that message removes them;
   swiping between replies keeps them.
+
+## Automatic detection
+After each message that mentions something physical (wounds, blood, falling, cold,
+wet, hunger…), a small separate request asks a model what changed. Messages without
+such words are skipped, so most messages cost nothing.
+
+- **Ask me** (default): proposals appear at the top of the HUD. Apply ✓, edit ✎
+  then apply, or reject ✗. If the story doesn't say left or right, you pick.
+- **Apply automatically**: changes apply straight away. **Recent automatic
+  changes** in the HUD lists them, each with undo.
+- **Only when I press Scan**: nothing runs on its own. **Scan last message** checks on demand.
+- **Off.**
+
+Changes are stored on the message that caused them: delete that message and
+they go with it. Pick a cheap model for this under **Model** (any saved
+Connection Profile), or leave it on the chat's model.
+
+## ✨ Suggestions
+In the condition form, ✨ next to Effect, Details or Cause asks the model to write
+that field from what you've filled in plus the recent story. **Fill empty** fills
+only the empty ones, so text you typed is kept.
 
 ## What the AI sees
 Before each reply (including swipes and regenerations) the extension adds one
@@ -56,6 +77,8 @@ Seraphina:
   message; or before or after the main prompt); sent as system, user or assistant;
   max length in tokens (default 200; the least important lines are cut first);
   temperature always or only when abnormal.
+- Detection: mode, model (Connection Profile), check your own messages too, skip
+  messages with no injury/state words, include the previous message for context.
 
 ## Body templates
 `templates/human.json` defines the parts tree and the mannequin drawing. Parts

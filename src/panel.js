@@ -5,8 +5,12 @@ import {
     BLEEDING, BODY_PART, BODY_STATES, KINDS, MIND_PART, SEVERITIES, STATUSES,
     isAffected, missingParts, newId, severityRank,
 } from './model.js';
+import { withSide } from './detect.js';
 import { renderMannequin } from './mannequin.js';
-import { buildBodies, getSceneMembers, hasOpenChat, writeManualOps } from './store.js';
+import { isBusy, scanLatest, suggestFields } from './runner.js';
+import {
+    buildBodies, collectPending, getSceneMembers, hasOpenChat, recentDetected, resolvePending, undoOp, writeManualOps,
+} from './store.js';
 
 const INJURY_TYPES = [
     'Cut', 'Stab wound', 'Arrow wound', 'Gunshot wound', 'Bite', 'Claw marks', 'Bruise',
@@ -21,7 +25,7 @@ const SIDE_DRAWERS = {
 
 let opts;            // { getSettings, saveSettings, getIndex, getNote, onStateChange }
 let selected = null; // member key currently shown
-let form = null;     // null | { mode: 'add' | 'edit' | 'temp', id?: string, part?: string }
+let form = null;     // null | { mode: 'add'|'edit'|'temp'|'review', id?, part?, draft?, index?, pid?, who?, cond? }
 let zoom = null;     // region id being inspected, or null for the whole body
 let observer = null;
 
@@ -47,6 +51,7 @@ export function initPanel(options) {
             <div id="body_hud_panel">
                 <div class="bh-header">
                     <b>Body HUD</b>
+                    <span id="body_hud_busy" class="fa-solid fa-spinner fa-spin" title="Checking the latest message…"></span>
                     <div id="body_hud_close" class="fa-solid fa-xmark bh-iconbtn" title="Close"></div>
                 </div>
                 <div class="bh-members"></div>
@@ -116,6 +121,10 @@ export function render() {
         return;
     }
 
+    // Keep what's typed in an open form across re-renders.
+    if (form && form.key && $('#body_hud_panel .bh-form').attr('data-key') === form.key) form.draft = rawForm();
+    $('#body_hud_busy').toggle(isBusy());
+
     const bodies = buildBodies();
     const members = getSceneMembers();
     if (!members.some(m => m.key === selected)) selected = members[members.length - 1]?.key;
@@ -127,7 +136,7 @@ export function render() {
         </div>`).join(''));
 
     const body = bodies.get(selected) || { conditions: new Map(), temp: null };
-    let html = '';
+    let html = renderPending(members);
     if (zoom && index.parts.has(zoom)) html += renderZoom(body, index);
     else if (opts.getSettings().showMannequin) {
         zoom = null;
@@ -177,10 +186,15 @@ export function render() {
         html += '<div class="bh-empty">No conditions. Nothing is sent to the AI for this character.</div>';
     }
 
+    const scan = opts.getSettings().detectMode !== 'off'
+        ? '<div class="menu_button" data-act="scan" title="Ask the model to check the latest message for body changes"><i class="fa-solid fa-magnifying-glass"></i> Scan last message</div>'
+        : '';
     html += `<div class="bh-actions">
         <div class="menu_button" data-act="add"><i class="fa-solid fa-plus"></i> Condition</div>
         <div class="menu_button" data-act="temp"><i class="fa-solid fa-temperature-half"></i> Temperature</div>
+        ${scan}
     </div>`;
+    html += renderLog(members, index);
 
     html += renderNotePreview();
 
@@ -229,6 +243,60 @@ function renderZoom(body, index) {
         </div>
         ${rows.join('')}
     </div>`;
+}
+
+// Proposals from detection waiting for the user's decision.
+function renderPending(members) {
+    const pending = collectPending();
+    if (!pending.length) return '';
+    const name = key => members.find(m => m.key === key)?.name || key;
+    const rows = pending.map(p => {
+        const ref = `data-index="${p.index}" data-pid="${esc(p.pid)}"`;
+        const buttons = p.needsSide
+            ? `<div class="menu_button bh-small" data-act="side" data-side="left" ${ref}>Left</div>
+               <div class="menu_button bh-small" data-act="side" data-side="right" ${ref}>Right</div>`
+            : `<div class="fa-solid fa-check bh-iconbtn" data-act="approve" ${ref} title="Apply"></div>
+               ${p.op.t === 'add' ? `<div class="fa-solid fa-pen bh-iconbtn" data-act="review-edit" ${ref} title="Edit, then apply"></div>` : ''}`;
+        const extra = p.op.t === 'add' && p.op.cond.effect ? `<div class="bh-cond-effect">${esc(p.op.cond.effect)}</div>` : '';
+        return `<div class="bh-cond bh-pending">
+            <div class="bh-cond-main">
+                <div>${esc(p.summary)}</div>${extra}
+                <div class="bh-cond-meta">from message #${p.index}${p.needsSide ? ' · which side?' : ''}${p.who !== selected ? ` · ${esc(name(p.who))}` : ''}</div>
+            </div>
+            <div class="bh-cond-btns">${buttons}
+                <div class="fa-solid fa-xmark bh-iconbtn" data-act="reject" ${ref} title="Reject"></div>
+            </div>
+        </div>`;
+    }).join('');
+    return `<div class="bh-review bh-section">
+        <div class="bh-section-title">Proposed changes (${pending.length})</div>
+        ${rows}
+        <div class="bh-actions">
+            <div class="menu_button bh-small" data-act="approve-all">Apply all</div>
+            <div class="menu_button bh-small" data-act="reject-all">Reject all</div>
+        </div>
+    </div>`;
+}
+
+// Changes made by detection, newest first, each with an undo.
+function renderLog(members, index) {
+    const items = recentDetected(10);
+    if (!items.length) return '';
+    const name = key => members.find(m => m.key === key)?.name || key;
+    const describe = op => {
+        switch (op.t) {
+            case 'add': return `${op.cond.type}${op.cond.part && index.parts.has(op.cond.part) ? ` — ${partName(index, op.cond.part)}` : ''}`;
+            case 'edit': return Object.entries(op.changes).map(([k, v]) => `${k} → ${v}`).join(', ');
+            case 'remove': return 'removed a condition';
+            case 'temp': return op.value === null ? 'temperature cleared' : `temperature ${op.value} °C`;
+            default: return op.t;
+        }
+    };
+    const rows = items.map(({ index: i, op }) => `<div class="bh-logrow">
+        <span>${esc(name(op.who))}: ${esc(describe(op))} <small>(#${i}${op.src === 'review' ? ', reviewed' : ''})</small></span>
+        <span class="fa-solid fa-rotate-left bh-iconbtn" data-act="undo" data-index="${i}" data-oid="${esc(op.oid)}" title="Undo"></span>
+    </div>`).join('');
+    return `<details class="bh-log bh-section"><summary class="bh-section-title">Recent automatic changes</summary>${rows}</details>`;
 }
 
 // Exactly what will be sent before the next reply, for every body in the scene.
@@ -311,8 +379,11 @@ function renderForm(body, index) {
         </div>`;
     }
 
-    const c = form.mode === 'edit' ? body.conditions.get(form.id) : null;
-    const v = c || { kind: 'injury', part: form.part || '', type: '', severity: 'moderate', bleeding: 'none', status: 'fresh', effect: '', details: '', cause: '', hidden: false };
+    form.key = form.key || newId();
+    const c = form.mode === 'edit' ? body.conditions.get(form.id) : form.mode === 'review' ? form.cond : null;
+    const base = c || { kind: 'injury', part: form.part || '', type: '', severity: 'moderate', bleeding: 'none', status: 'fresh', effect: '', details: '', cause: '', hidden: false };
+    const v = { ...base, ...(form.draft || {}) };
+    const fill = field => `<span class="fa-solid fa-wand-magic-sparkles bh-fill" data-act="fill" data-field="${field}" title="Suggest this from the condition and the recent story"></span>`;
     const hideSensitive = opts.getSettings().hideSensitive;
     const partOpts = index.order
         .filter(id => !(hideSensitive && index.parts.get(id).sensitive) || id === v.part)
@@ -321,8 +392,8 @@ function renderForm(body, index) {
             return `<option value="${esc(id)}" ${id === v.part ? 'selected' : ''}>${'  '.repeat(p.depth)}${esc(p.name)}</option>`;
         }).join('');
 
-    return `<div class="bh-form">
-        <div class="bh-section-title">${c ? 'Edit condition' : 'New condition'}</div>
+    return `<div class="bh-form" data-key="${form.key}">
+        <div class="bh-section-title">${form.mode === 'review' ? 'Edit proposed change' : c ? 'Edit condition' : 'New condition'}</div>
         <label>Kind <select id="bh_f_kind" class="text_pole">${options(Object.keys(KINDS), v.kind || 'injury', Object.values(KINDS))}</select></label>
         <label class="bh-f-part"><span class="bh-f-part-label">Part</span> <select id="bh_f_part" class="text_pole"><option value="">— choose —</option>${partOpts}</select></label>
         <label class="bh-f-type">What <input id="bh_f_type" class="text_pole" list="bh_types" value="${esc(v.type)}" placeholder="e.g. Arrow wound"></label>
@@ -332,13 +403,14 @@ function renderForm(body, index) {
             <label class="bh-f-bleed">Bleeding <select id="bh_f_bleed" class="text_pole">${options(BLEEDING, v.bleeding || 'none')}</select></label>
             <label class="bh-f-status">Status <select id="bh_f_status" class="text_pole">${options(STATUSES, v.status || 'fresh')}</select></label>
         </div>
-        <label>Effect (what they can't do) <input id="bh_f_effect" class="text_pole" value="${esc(v.effect)}" placeholder="e.g. Can't run; limps"></label>
-        <label>Details <input id="bh_f_details" class="text_pole" value="${esc(v.details)}" placeholder="e.g. Arrowhead still lodged"></label>
-        <label>Cause <input id="bh_f_cause" class="text_pole" value="${esc(v.cause)}" placeholder="e.g. Bandit's arrow"></label>
+        <label>Effect (what they can't do) ${fill('effect')}<input id="bh_f_effect" class="text_pole" value="${esc(v.effect)}" placeholder="e.g. Can't run; limps"></label>
+        <label>Details ${fill('details')}<input id="bh_f_details" class="text_pole" value="${esc(v.details)}" placeholder="e.g. Arrowhead still lodged"></label>
+        <label>Cause ${fill('cause')}<input id="bh_f_cause" class="text_pole" value="${esc(v.cause)}" placeholder="e.g. Bandit's arrow"></label>
         <label class="checkbox_label"><input id="bh_f_hidden" type="checkbox" ${v.hidden ? 'checked' : ''}> <span>Hidden from other characters</span></label>
         <div class="bh-actions">
-            <div class="menu_button" data-act="save">Save</div>
+            <div class="menu_button" data-act="save">${form.mode === 'review' ? 'Apply' : 'Save'}</div>
             <div class="menu_button" data-act="cancel">Cancel</div>
+            <div class="menu_button" data-act="fill" data-field="" title="Suggest Effect, Details and Cause where they're empty"><i class="fa-solid fa-wand-magic-sparkles"></i> Fill empty</div>
         </div>
     </div>`;
 }
@@ -358,6 +430,22 @@ function updateFormFields() {
     if (kind === 'missing' && form?.mode === 'add') $('#bh_f_status').val('permanent');
     const list = kind === 'state' ? BODY_STATES : isInjury ? INJURY_TYPES : [];
     $('#bh_types').html(list.map(t => `<option value="${esc(t)}">`).join(''));
+}
+
+// Current form values without validation (for drafts and the fill buttons).
+function rawForm() {
+    return {
+        kind: $('#bh_f_kind').val(),
+        part: $('#bh_f_part').val(),
+        type: String($('#bh_f_type').val() ?? ''),
+        severity: $('#bh_f_sev').val(),
+        bleeding: $('#bh_f_bleed').val(),
+        status: $('#bh_f_status').val(),
+        effect: String($('#bh_f_effect').val() ?? ''),
+        details: String($('#bh_f_details').val() ?? ''),
+        cause: String($('#bh_f_cause').val() ?? ''),
+        hidden: $('#bh_f_hidden').is(':checked'),
+    };
 }
 
 function readForm() {
@@ -386,6 +474,39 @@ async function onAction(e) {
     e.stopPropagation();
     const act = $(this).attr('data-act');
     const id = $(this).attr('data-id');
+    const pIndex = Number($(this).attr('data-index'));
+    const pid = $(this).attr('data-pid');
+    const findPending = () => collectPending().find(p => p.index === pIndex && p.pid === pid);
+    const afterStore = async promise => {
+        await promise;
+        render();
+        opts.onStateChange?.();
+    };
+    switch (act) {
+        case 'approve': { const p = findPending(); if (p) await afterStore(resolvePending(pIndex, pid, p.op)); return; }
+        case 'side': { const p = findPending(); if (p) await afterStore(resolvePending(pIndex, pid, withSide(p, $(this).attr('data-side')).op)); return; }
+        case 'reject': await afterStore(resolvePending(pIndex, pid, null)); return;
+        case 'approve-all':
+        case 'reject-all':
+            await afterStore((async () => {
+                for (const p of collectPending()) {
+                    if (act === 'approve-all' && p.needsSide) continue;
+                    await resolvePending(p.index, p.pid, act === 'approve-all' ? p.op : null);
+                }
+            })());
+            return;
+        case 'review-edit': {
+            const p = findPending();
+            if (!p) return;
+            selected = p.who;
+            form = { mode: 'review', index: p.index, pid: p.pid, who: p.who, cond: p.op.cond, scroll: true };
+            render();
+            return;
+        }
+        case 'undo': await afterStore(undoOp(pIndex, $(this).attr('data-oid'))); return;
+        case 'scan': scanLatest(); return;
+        case 'fill': await fillFields($(this).attr('data-field')); return;
+    }
     let ops = null;
     switch (act) {
         case 'add': form = { mode: 'add', scroll: true }; break;
@@ -401,6 +522,12 @@ async function onAction(e) {
         case 'save': {
             const { cond, error } = readForm();
             if (error) { toastr.warning(error); return; }
+            if (form.mode === 'review') {
+                const { index: i, pid: rpid, who, cond: orig } = form;
+                form = null;
+                await afterStore(resolvePending(i, rpid, { t: 'add', who, cond: { ...orig, ...cond } }));
+                return;
+            }
             ops = form.mode === 'edit'
                 ? [{ t: 'edit', who: selected, id: form.id, changes: cond }]
                 : [{ t: 'add', who: selected, cond: { id: newId(), ...cond } }];
@@ -425,4 +552,40 @@ async function onAction(e) {
     render();
     if (ops) opts.onStateChange?.();
     await saving;
+}
+
+// ✨ buttons: one field (replaces it) or every empty field.
+async function fillFields(field) {
+    const index = opts.getIndex();
+    const raw = rawForm();
+    if (raw.kind !== 'missing' && !raw.type.trim()) {
+        toastr.info('Fill in "What" first, so there is something to describe.');
+        return;
+    }
+    const who = form?.mode === 'review' ? form.who : selected;
+    const member = getSceneMembers().find(m => m.key === who);
+    const part = raw.kind === 'state' ? (raw.part || BODY_PART) : raw.kind.startsWith('mind') ? MIND_PART : raw.part;
+    const targets = field ? [field] : ['effect', 'details', 'cause'].filter(f => !raw[f].trim());
+    if (!targets.length) { toastr.info('Nothing empty to fill.'); return; }
+    const myForm = form;
+    $('.bh-fill, [data-act="fill"]').addClass('bh-working');
+    try {
+        const suggestion = await suggestFields({
+            characterName: member?.name || 'Character',
+            cond: { ...raw, type: raw.kind === 'missing' ? 'Missing' : raw.type },
+            partLabel: part === BODY_PART ? 'whole body' : partName(index, part),
+        });
+        if (form !== myForm) return;
+        let filled = 0;
+        for (const f of targets) {
+            const val = String(suggestion?.[f] ?? '').trim();
+            if (val) { $(`#bh_f_${f}`).val(val); filled++; }
+        }
+        if (!filled) toastr.warning('The model had no suggestion. Try again or type it yourself.');
+    } catch (e) {
+        console.error('[Body HUD] fill failed', e);
+        toastr.warning('Body HUD: the suggestion request failed.');
+    } finally {
+        $('.bh-fill, [data-act="fill"]').removeClass('bh-working');
+    }
 }
