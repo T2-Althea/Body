@@ -2,7 +2,7 @@
 // time; a result is only used if its message is unchanged when it comes back.
 
 import { buildDetectPrompt, buildFillPrompt, mightMatter, parseDetection } from './detect.js';
-import { callModel, extractJson } from './llm.js';
+import { callModel, describeFailure, extractJson } from './llm.js';
 import { fingerprint } from './model.js';
 import { addPending, buildBodies, getSceneMembers, writeDetectedOps } from './store.js';
 
@@ -21,6 +21,12 @@ export const isBusy = () => busy > 0;
 function modelChoice() {
     const s = opts.getSettings();
     return s.modelProfile ? { source: 'profile', profileId: s.modelProfile } : { source: 'main' };
+}
+
+// Reasoning models spend part of this thinking before they answer, so it's generous;
+// a non-reasoning model only uses what the short answer needs.
+function maxTokens() {
+    return Math.max(200, Number(opts.getSettings().taskMaxTokens) || 2000);
 }
 
 function setBusy(delta) {
@@ -78,10 +84,10 @@ async function detect(msg, { manual }) {
     setBusy(1);
     let raw;
     try {
-        raw = await callModel(modelChoice(), system, user, 700);
+        raw = await callModel(modelChoice(), system, user, maxTokens());
     } catch (e) {
         console.error('[Body HUD] detection request failed', e);
-        toastr.warning('Body HUD: the detection request failed. See the browser console for details.');
+        toastr.warning(describeFailure(e), 'Body HUD: detection failed', { timeOut: 10000 });
         return;
     } finally {
         setBusy(-1);
@@ -90,7 +96,7 @@ async function detect(msg, { manual }) {
     const json = extractJson(raw);
     if (!json) {
         console.warn('[Body HUD] detection reply was not JSON:', raw);
-        if (manual) toastr.warning('Body HUD: the model did not reply with usable data.');
+        toastr.warning('The model\'s answer was cut off or not in the expected format. Raising "Max reply tokens" in the settings usually helps.', 'Body HUD: detection failed', { timeOut: 10000 });
         return;
     }
     // The message may have been deleted, edited or swiped while we waited.
@@ -129,7 +135,7 @@ export async function suggestFields({ characterName, cond, partLabel }) {
     const { system, user } = buildFillPrompt({ characterName, cond, partLabel, recentChat });
     setBusy(1);
     try {
-        const raw = await callModel(modelChoice(), system, user, 250);
+        const raw = await callModel(modelChoice(), system, user, maxTokens());
         return extractJson(raw) || {};
     } finally {
         setBusy(-1);

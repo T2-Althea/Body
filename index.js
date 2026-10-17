@@ -31,6 +31,7 @@ const defaultSettings = Object.freeze({
     detectPrefilter: true,  // skip messages without injury/state words
     detectContext: true,    // include the previous message for context
     modelProfile: '',       // Connection Profile id; empty = the chat's current model
+    taskMaxTokens: 2000,    // reply allowance for detection and ✨ (reasoning models think first)
 });
 
 let templateIndex = null;
@@ -173,6 +174,10 @@ function renderSettings() {
                     <span>Model</span>
                     <select id="body_hud_profile" class="text_pole"></select>
                 </div>
+                <div class="bh-setting-row" title="How much the model may write for detection and ✨ suggestions. Reasoning models spend part of it thinking before they answer; if requests come back empty, raise this. Non-reasoning models only use what the short answer needs.">
+                    <span>Max reply tokens</span>
+                    <input id="body_hud_task_tokens" class="text_pole" type="number" min="200" max="32000" step="100" value="${s.taskMaxTokens}">
+                </div>
                 <label class="checkbox_label">
                     <input type="checkbox" id="body_hud_detect_user" ${s.detectUser ? 'checked' : ''}>
                     <span>Also check my messages</span>
@@ -212,6 +217,7 @@ function renderSettings() {
     bind('#body_hud_detect_user', 'detectUser', el => el.checked);
     bind('#body_hud_prefilter', 'detectPrefilter', el => el.checked);
     bind('#body_hud_detect_ctx', 'detectContext', el => el.checked);
+    bind('#body_hud_task_tokens', 'taskMaxTokens', num(200, 32000));
     setupProfileDropdown();
 }
 

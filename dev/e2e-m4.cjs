@@ -49,7 +49,9 @@ const taskCount = () => (fs.existsSync(taskLog) ? fs.readFileSync(taskLog, 'utf8
     t0 = taskCount();
     await send('An arrow hits Seraphina in the left thigh.');
     check('injury message is checked', taskCount() > t0);
-    const detectReq = JSON.parse(fs.readFileSync(taskLog, 'utf8').trim().split('\n').pop()).messages;
+    const detectEntry = JSON.parse(fs.readFileSync(taskLog, 'utf8').trim().split('\n').pop());
+    const detectReq = detectEntry.messages;
+    check('detection gets a generous reply allowance (reasoning models)', detectEntry.max_tokens === 2000, String(detectEntry.max_tokens));
     check('the check sees only the new message plus one before it', JSON.stringify(detectReq).includes('NEW MESSAGE') && !JSON.stringify(detectReq).includes('She smiles and pours'));
     check('one proposal waits for review', await pendingCount() === 1);
     check('proposal describes the wound', (await page.locator('.bh-pending').first().innerText()).includes('Arrow wound — Left thigh (moderate)'));
@@ -110,6 +112,15 @@ const taskCount = () => (fs.existsSync(taskLog) ? fs.readFileSync(taskLog, 'utf8
     await idle();
     check('Scan checks the latest message', taskCount() > t0);
     await setSetting('#body_hud_detect_mode', 'ask');
+
+    // 8b. A reasoning model that runs out of room explains itself.
+    await setSetting('#body_hud_detect_mode', 'ask');
+    await page.evaluate(() => toastr.clear());
+    await send('She will think too long about the wound.');
+    await page.waitForTimeout(500);
+    const toasts = await page.locator('#toast-container').innerText().catch(() => '');
+    check('empty reply: toast says to raise Max reply tokens', toasts.includes('Max reply tokens'), toasts.replace(/\n/g, ' ').slice(0, 160));
+    await page.evaluate(() => toastr.clear());
 
     // 9. Deleting the message removes what it caused.
     await page.evaluate(i => SillyTavern.getContext().executeSlashCommandsWithOptions(`/cut ${i}`), userIdx);

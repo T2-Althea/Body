@@ -44,11 +44,14 @@ http.createServer((req, res) => {
             const task = taskReply(all);
             // Extension background tasks go to a separate log, so tests reading the
             // roleplay requests aren't confused by them.
-            fs.appendFileSync(task ? logFile + '.tasks' : logFile, JSON.stringify({ messages: data.messages }) + '\n');
+            fs.appendFileSync(task ? logFile + '.tasks' : logFile, JSON.stringify({ messages: data.messages, max_tokens: data.max_tokens }) + '\n');
             n++;
+            // Imitates a reasoning model that used its whole allowance thinking.
+            const newMessage = all.split(/NEW MESSAGE — [^\n]*:\n/)[1] || '';
+            const exhausted = task !== null && newMessage.includes('think too long');
             return res.end(JSON.stringify({
                 id: 'fake-' + n, object: 'chat.completion', model: 'fake-model',
-                choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: task ?? `Fake reply number ${n}.` } }],
+                choices: [{ index: 0, finish_reason: exhausted ? 'length' : 'stop', message: { role: 'assistant', content: exhausted ? '' : (task ?? `Fake reply number ${n}.`) } }],
                 usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
             }));
         }

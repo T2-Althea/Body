@@ -77,8 +77,10 @@ Seraphina:
   message; or before or after the main prompt); sent as system, user or assistant;
   max length in tokens (default 200; the least important lines are cut first);
   temperature always or only when abnormal.
-- Detection: mode, model (Connection Profile), check your own messages too, skip
-  messages with no injury/state words, include the previous message for context.
+- Detection: mode, model (Connection Profile), max reply tokens (default 2000;
+  reasoning models think before answering, so if detection or ✨ come back empty,
+  raise it), check your own messages too, skip messages with no injury/state
+  words, include the previous message for context.
 
 ## Body templates
 `templates/human.json` defines the parts tree and the mannequin drawing. Parts

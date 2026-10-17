@@ -56,9 +56,26 @@ Full concept: `docs/concept.md`. SillyTavern facts and gotchas: `docs/m0-orienta
   "Mind: current state"). Auto source options: read SillyTavern's Expressions
   extension (28 labels; `/expression-last` returns a character's last one) or
   report mood from the M4 detection call. Note only includes strong/relevant moods.
-- **Hunger / thirst:** stepped levels (e.g. fed → peckish → hungry → starving),
-  no numbers. Set manually, by M4 detection (eating/drinking), or by M6 time
-  skips (Grounded/Simulation only). In the note only when it matters.
+- **Meters (hunger, thirst, mana, stamina, sleep…):** one generic feature.
+  A meter = named stepped levels, each with a short effect line; shown as a small
+  bar per character in the HUD, sent to the AI as words only, and only when not
+  at the comfortable level. Per-character on/off (e.g. mana only for casters).
+  Meter sets are editable JSON files like body templates, shipped presets:
+  - Hunger: fed → peckish → hungry → starving. Thirst likewise.
+  - Sleep: rested → tired → sleep-deprived → barely functioning.
+  - Stamina (user's martial codex, COS-022): fresh → winded → tired → exhausted
+    → spent. Optional "strain warning" state (tremor, numbness, or sudden calm
+    before forcing a feat past one's limit); forcing a feat should lead detection
+    to propose the injury it costs (torn muscle, cracked bone…).
+  - Mana (user's mana codex, COS-001): full → drawn on → low → "the ring"
+    (~5%: muffled hearing, tunnel vision, ringing = Depletion Threshold Warning)
+    → depleted (Mana Sickness: paralysis, hallucinations, heavy nosebleed, then
+    Depletion Coma, unwakeable until ~25% returns, 1–3 h in normal ambient).
+    Separate state "Mana saturation" (dungeons: tingling extremities, headache,
+    edge-of-vision disturbance, disorientation; risk of crystallization). The
+    codex forbids figures in fiction, so the note uses words, never percentages.
+  Moved by: manual, M4 detection (eating, casting, fighting, sleeping), and M6
+  time skips (recovery/drift by realism level).
 - **Clothing & accessories (no visuals):** slots per character (head, ears,
   face/piercings, neck, top, outerwear, arms, wrists, hands, fingers, underwear,
   pants, legwear, leg accessories, shoes), item + short description; slots can

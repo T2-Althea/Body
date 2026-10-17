@@ -6,6 +6,7 @@ import {
     isAffected, missingParts, newId, severityRank,
 } from './model.js';
 import { withSide } from './detect.js';
+import { describeFailure } from './llm.js';
 import { renderMannequin } from './mannequin.js';
 import { isBusy, scanLatest, suggestFields } from './runner.js';
 import {
@@ -581,10 +582,10 @@ async function fillFields(field) {
             const val = String(suggestion?.[f] ?? '').trim();
             if (val) { $(`#bh_f_${f}`).val(val); filled++; }
         }
-        if (!filled) toastr.warning('The model had no suggestion. Try again or type it yourself.');
+        if (!filled) toastr.warning('The model\'s answer was cut off or empty. Try again, or raise "Max reply tokens" in the settings.', 'Body HUD');
     } catch (e) {
         console.error('[Body HUD] fill failed', e);
-        toastr.warning('Body HUD: the suggestion request failed.');
+        toastr.warning(describeFailure(e), 'Body HUD: suggestion failed', { timeOut: 10000 });
     } finally {
         $('.bh-fill, [data-act="fill"]').removeClass('bh-working');
     }

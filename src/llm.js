@@ -3,6 +3,23 @@
 
 const ctx = () => SillyTavern.getContext();
 
+// Thrown when the model returned no answer text. Usually a reasoning model that
+// spent the whole token allowance thinking (finish_reason "length").
+export class EmptyReplyError extends Error {
+    constructor() {
+        super('The model returned no answer text');
+        this.name = 'EmptyReplyError';
+    }
+}
+
+/** A user-facing explanation for a failed request. */
+export function describeFailure(e) {
+    if (e instanceof EmptyReplyError) {
+        return 'The model returned no answer. If it is a reasoning model, it probably used the whole allowance thinking: raise "Max reply tokens" in the Body HUD settings, or pick a non-reasoning model.';
+    }
+    return 'The request failed. Details are in the SillyTavern server window and the browser console (F12).';
+}
+
 /**
  * @param {{ source: 'main'|'profile', profileId?: string }} model
  * @param {string} system
@@ -19,9 +36,19 @@ export async function callModel(model, system, user, maxTokens) {
             maxTokens,
             { stream: false, extractData: true, includePreset: true, includeInstruct: true },
         );
-        return typeof res === 'string' ? res : String(res?.content ?? '');
+        const text = typeof res === 'string' ? res : String(res?.content ?? '');
+        if (!text.trim()) throw new EmptyReplyError();
+        return text;
     }
-    return await c.generateRaw({ systemPrompt: system, prompt: user, responseLength: maxTokens, trimNames: false });
+    try {
+        const text = await c.generateRaw({ systemPrompt: system, prompt: user, responseLength: maxTokens, trimNames: false });
+        if (!String(text ?? '').trim()) throw new EmptyReplyError();
+        return text;
+    } catch (e) {
+        // generateRaw throws this when the reply had no text.
+        if (/No message generated/i.test(String(e?.message))) throw new EmptyReplyError();
+        throw e;
+    }
 }
 
 /** Pulls the first JSON object out of a model reply (tolerates code fences and chatter). */
